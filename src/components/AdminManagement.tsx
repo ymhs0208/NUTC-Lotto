@@ -147,7 +147,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
   const [domainFormName, setDomainFormName] = useState<string>('');
   const [domainFormPrefix, setDomainFormPrefix] = useState('');
   const [domainFormGroupCount, setDomainFormGroupCount] = useState<number>(2);
-  const [domainFormOrder, setDomainFormOrder] = useState<number>(1);
   const [domainManualCounts, setDomainManualCounts] = useState(false);
   const [domainCapacityDrafts, setDomainCapacityDrafts] = useState<Record<number, string>>({});
   const [domainFormError, setDomainFormError] = useState<string | null>(null);
@@ -249,7 +248,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     setEditingDomain(null);
     setDomainFormName('');
     setDomainFormPrefix('');
-    setDomainFormOrder(domainConfigs.length + 1);
     setDomainFormGroupCount(2);
     setDomainManualCounts(false);
     setDomainCapacityDrafts({});
@@ -263,7 +261,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     setEditingDomain(cfg);
     setDomainFormName(cfg.field);
     setDomainFormPrefix(cfg.drawPrefix || getDomainCode(cfg.field) || '');
-    setDomainFormOrder(domainConfigs.findIndex(c => c.id === cfg.id) + 1);
     setDomainFormGroupCount(cfg.groupCount);
     setDomainManualCounts(!!cfg.groupCapacities);
     setDomainCapacityDrafts(Object.fromEntries(Object.entries(cfg.groupCapacities || {}).map(([group, count]) => [group, String(count)])));
@@ -337,12 +334,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       return;
     }
 
-    const positionCount = domainConfigs.length + (editingDomain ? 0 : 1);
-    if (!Number.isInteger(domainFormOrder) || domainFormOrder < 1 || domainFormOrder > positionCount) {
-      setDomainFormError('請選擇有效的顯示順序！');
-      return;
-    }
-
     let groupCapacities: Record<number, number> | undefined;
     if (domainManualCounts) {
       groupCapacities = {};
@@ -372,7 +363,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       const current = domainConfigs.find(c => c.id === editingDomain.id);
       if (!current) throw new Error('此領域已不存在，請重新整理後再操作。');
       const updatedConfigs = domainConfigs.filter(c => c.id !== editingDomain.id);
-      updatedConfigs.splice(domainFormOrder - 1, 0, {
+      updatedConfigs.splice(domainConfigs.findIndex(c => c.id === editingDomain.id), 0, {
         ...current, field: cleanName, drawPrefix, groupCount: Number(domainFormGroupCount), groupCapacities,
         evaluatorsPerGroup: Object.fromEntries(Object.entries(current.evaluatorsPerGroup || {})
           .filter(([group]) => /^[1-9]\d*$/.test(group) && Number(group) <= domainFormGroupCount)),
@@ -385,7 +376,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
       setUploadFeedback({
         type: 'success',
-        message: `成功更新領域「${cleanName}」（顯示順序：第 ${domainFormOrder} 位，組數：${domainFormGroupCount} 組）${
+        message: `成功更新領域「${cleanName}」（顯示代碼：${effectivePrefix || '領域名稱'}，組數：${domainFormGroupCount} 組）${
           isRenamed ? `，並同步更新原「${oldName}」之專題資料` : ''
         }！`,
       });
@@ -408,12 +399,12 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       };
 
       const updatedConfigs = [...domainConfigs];
-      updatedConfigs.splice(domainFormOrder - 1, 0, newDomain);
+      updatedConfigs.push(newDomain);
       await onUpdateDomainConfigs(updatedConfigs);
 
       setUploadFeedback({
         type: 'success',
-        message: `成功新增專題展覽領域「${cleanName}」（顯示順序：第 ${domainFormOrder} 位，分組數：${domainFormGroupCount} 組）！`,
+        message: `成功新增專題展覽領域「${cleanName}」（顯示代碼：${effectivePrefix || '領域名稱'}，分組數：${domainFormGroupCount} 組）！`,
       });
     }
 
@@ -839,9 +830,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
               <Layers className="w-4 h-4 text-rose-600 shrink-0" />
               <span>專題展領域、分組數與評審委員設定</span>
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              點選領域的「編輯」，使用顯示順序下拉選單調整位置，儲存後同步至「專題報告抽籤現場」。
-            </p>
           </div>
 
           <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
@@ -884,7 +872,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
         {domainDisplayMode === 'cards' ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {domainStats.map((stat, index) => {
+          {domainStats.map(stat => {
             const drawnCount = projects.filter((p) => p.field === stat.field && p.draw_order).length;
             const isSelected = selectedFieldFilter === stat.field;
             const cfgObj = domainConfigs.find((c) => c.id === stat.id) || {
@@ -904,8 +892,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                 }`}
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-slate-500">顯示順序</span>
-                  <span className="text-xs font-bold tabular-nums text-slate-600">{index + 1}</span>
+                  <span className="text-xs font-medium text-slate-500">顯示代碼</span>
+                  <span className="text-xs font-bold font-mono text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || '領域名稱'}</span>
                 </div>
                 {/* Header: Title & Group Count */}
                 <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
@@ -913,7 +901,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     <h3 className="text-sm font-bold text-slate-900 truncate">
                       {stat.field}
                     </h3>
-                    <p className="mt-1 text-xs text-slate-500">結果字母：<span className="font-mono font-semibold text-slate-700">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || '領域名稱'}</span></p>
                     <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500 font-mono">
                       <span>專題: <strong className="text-slate-800 font-bold">{stat.count}</strong> 件</span>
                       <span className="text-slate-300">·</span>
@@ -973,7 +960,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                   <button
                     onClick={() => handleOpenEditDomain(cfgObj)}
                     className="py-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium flex items-center justify-center gap-1 border border-slate-200 cursor-pointer transition-colors"
-                    title="編輯領域、顯示順序與分組組數"
+                    title="編輯領域、顯示代碼與分組組數"
                   >
                     <Edit className="w-3.5 h-3.5" />
                     <span>編輯</span>
@@ -996,7 +983,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           <table className="w-full min-w-[850px] text-left text-xs sm:text-sm border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-xs">
-                <th className="py-2.5 px-4 text-center border border-slate-200 whitespace-nowrap">顯示順序</th>
+                <th className="py-2.5 px-4 text-center border border-slate-200 whitespace-nowrap">顯示代碼</th>
                 <th className="py-2.5 px-4 border border-slate-200">列標籤 (領域名稱)</th>
                 <th className="py-2.5 px-4 text-center border border-slate-200">件數</th>
                 <th className="py-2.5 px-4 text-center border border-slate-200">
@@ -1008,7 +995,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {domainStats.map((stat, index) => {
+              {domainStats.map(stat => {
                 const drawnCount = projects.filter((p) => p.field === stat.field && p.draw_order).length;
                 const isSelected = selectedFieldFilter === stat.field;
                 const cfgObj = domainConfigs.find((c) => c.id === stat.id) || {
@@ -1026,11 +1013,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     }`}
                   >
                     <td className="py-2 px-4 text-center border border-slate-200 whitespace-nowrap">
-                      <span className="text-xs font-bold tabular-nums text-slate-600">{index + 1}</span>
+                      <span className="text-xs font-bold font-mono text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || '領域名稱'}</span>
                     </td>
                     <td className="py-2 px-4 text-slate-800 border border-slate-200">
                       <span className="font-semibold text-slate-900">{stat.field}</span>
-                      <span className="ml-2 font-mono text-xs text-slate-500">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || ''}</span>
                     </td>
                     <td className="py-2 px-4 text-center font-mono font-bold text-slate-900 border border-slate-200">
                       {stat.count}
@@ -1083,7 +1069,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                         <button
                           onClick={() => handleOpenEditDomain(cfgObj)}
                           className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium flex items-center gap-1 cursor-pointer transition-colors"
-                          title="編輯領域、顯示順序與分組組數"
+                          title="編輯領域、顯示代碼與分組組數"
                         >
                           <Edit className="w-3 h-3 text-slate-500" />
                           <span>編輯</span>
@@ -1579,7 +1565,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
               <div>
                 <label htmlFor="domain-draw-prefix" className="block text-slate-700 mb-1 font-semibold">
-                  抽籤結果英文字母
+                  顯示代碼
                 </label>
                 <select
                   id="domain-draw-prefix"
@@ -1594,23 +1580,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                   })}
                 </select>
                 <p className="mt-1 text-xs text-slate-500">編號預覽：{getDomainCode(domainFormName, domainFormPrefix) || domainFormName.slice(0, 4) || '領域'}{getDomainCode(domainFormName, domainFormPrefix) ? '01' : '-第1組-序號01'}</p>
-              </div>
-
-              <div>
-                <label htmlFor="domain-display-order" className="block text-slate-700 mb-1 font-semibold">
-                  顯示順序
-                </label>
-                <select
-                  id="domain-display-order"
-                  value={domainFormOrder}
-                  onChange={e => { setDomainFormOrder(Number(e.target.value)); setDomainFormError(null); }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                >
-                  {Array.from({ length: domainConfigs.length + (editingDomain ? 0 : 1) }, (_, index) => (
-                    <option key={index + 1} value={index + 1}>第 {index + 1} 位</option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-slate-500 mt-1">儲存後移到指定位置，其餘領域依序調整。</p>
               </div>
 
               <div>
