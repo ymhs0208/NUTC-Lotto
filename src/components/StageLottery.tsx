@@ -338,7 +338,6 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
             <div className="stage-presentation-ready">
               <div className="stage-presentation-hero">
                 <div className="stage-presentation-intro">
-                  <span className="stage-presentation-emblem" aria-hidden="true"><img src="/android-chrome-512x512.png" alt="" /></span>
                   <div className="stage-presentation-title">
                     <p className="stage-presentation-scope">{selectedField === 'ALL' ? '全校各領域' : selectedFields?.length === 0 ? '尚未選擇領域' : selectedFields?.length === 1 ? selectedField : `本次已選 ${selectedFields?.length} 個領域`}</p>
                     <h2>{currentPool.length === 0 ? selectedFields?.length === 0 ? '請勾選抽籤領域' : '尚無專題資料' : undrawnPool.length ? '準備開始抽籤' : '報告場次與順位已排定'}</h2>
@@ -422,11 +421,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
              * ======================================================== */
             <div className="w-full max-w-6xl mx-auto text-left">
               <div className="flex flex-col gap-5 rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-slate-50 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between lg:p-8">
-                <div className="flex items-start gap-4 sm:gap-5">
-                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-blue-100 bg-white p-2 shadow-md shadow-blue-100 sm:h-16 sm:w-16" aria-hidden="true">
-                    <img src="/android-chrome-512x512.png" alt="" className="h-full w-full object-contain" />
-                  </span>
-                  <div>
+                <div className="min-w-0">
                     <p className="text-sm font-bold text-blue-800 sm:text-base">專題報告抽籤</p>
                     <h2 className="mt-1 text-2xl font-black leading-tight tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">
                       {currentPool.length === 0 ? selectedFields?.length === 0 ? '請勾選抽籤領域' : '此範圍尚無專題' : undrawnPool.length === 0 ? '此範圍已完成抽籤' : '準備開始抽籤'}
@@ -438,7 +433,6 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                         ? '場次與報告順位已排定，請查看下方結果看板。'
                         : '各領域依設定組數獨立分組，並排定各組的報告順序。'}
                     </p>
-                  </div>
                 </div>
                 {currentPool.length > 0 && (
                   <div className="grid shrink-0 grid-cols-2 gap-4 rounded-2xl border border-blue-200 bg-white/90 px-5 py-3 shadow-sm lg:px-6 lg:py-4">
