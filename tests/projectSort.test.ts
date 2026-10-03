@@ -15,6 +15,19 @@ const projects: ProjectItem[] = [
 ];
 const ids = (items: ProjectItem[]) => items.map(item => item.id);
 
+test('within-group order sorts numerically, independent of draw code, with unassigned projects last', () => {
+  const input: ProjectItem[] = [
+    { ...base, id: 'ten', assigned_group: 2, draw_order: 10, draw_code: 'A20' },
+    { ...base, id: 'two', assigned_group: 2, draw_order: 2, draw_code: 'A12' },
+    { ...base, id: 'one', assigned_group: 1, draw_order: 1, draw_code: 'A01' },
+    { ...base, id: 'undrawn' },
+    { ...base, id: 'incomplete', draw_order: 3 },
+  ];
+  assert.deepEqual(ids(sortProjects(input, 'draw_order', 'ascending')), ['one', 'two', 'ten', 'undrawn', 'incomplete']);
+  assert.deepEqual(ids(sortProjects(input, 'draw_order', 'descending')), ['ten', 'two', 'one', 'undrawn', 'incomplete']);
+  assert.deepEqual(ids(input), ['ten', 'two', 'one', 'undrawn', 'incomplete']);
+});
+
 test('roster sorting handles numeric text, undrawn values, status and both directions without changing the source', () => {
   assert.deepEqual(ids(sortProjects(projects, 'seq_no', 'ascending')), ['c', 'b', 'a']);
   assert.deepEqual(ids(sortProjects(projects, 'seq_no', 'descending')), ['a', 'b', 'c']);

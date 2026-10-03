@@ -1,13 +1,14 @@
 import type { ProjectItem } from '../types';
 
 export type ProjectSortKey =
-  | 'seq_no' | 'draw_code' | 'assigned_group' | 'evaluators' | 'field'
+  | 'seq_no' | 'draw_code' | 'assigned_group' | 'draw_order' | 'evaluators' | 'field'
   | 'original_code' | 'project_title' | 'leader_id' | 'password_set' | 'advisor';
 export type ProjectSortDirection = 'ascending' | 'descending';
 
 const collator = new Intl.Collator('zh-TW', { numeric: true, sensitivity: 'base' });
 
 function sortValue(project: ProjectItem, key: ProjectSortKey): string | number | null {
+  if (key === 'draw_order' && !project.assigned_group) return null;
   if (key === 'evaluators') return project.evaluators?.join('、') || null;
   if (key === 'password_set') return project.password_set ? 1 : 0;
   const value = project[key];

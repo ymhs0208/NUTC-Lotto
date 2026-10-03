@@ -40,8 +40,8 @@ export function ProjectRosterCard({ project: p, sharedPasswordEnabled, onEdit, o
             <dd className="mt-1 text-sm font-bold text-slate-800">{p.assigned_group ? `第 ${p.assigned_group} 組` : '待分配'}</dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-xs text-slate-500">組內順位</dt>
-            <dd className="mt-1 text-sm font-bold text-slate-800">{p.draw_order ? `第 ${p.draw_order} 位` : '待抽籤'}</dd>
+            <dt className="text-xs text-slate-500">組內順序</dt>
+            <dd className="mt-1 text-sm font-bold text-slate-800">{p.assigned_group && p.draw_order ? `第 ${p.draw_order} 位` : '待抽籤'}</dd>
           </div>
         </dl>
 
