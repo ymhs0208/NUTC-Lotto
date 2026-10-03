@@ -80,9 +80,12 @@ export function ResultCarousel({ projects, domains, scope, onClose }: Props) {
   return (
     <section className="result-carousel" role="dialog" aria-modal="true" aria-label="抽籤結果輪播">
       <header className="result-carousel-header">
-        <div className="result-carousel-heading">
-          <p>國立臺中科技大學 · 專題報告抽籤結果</p>
-          <h2>{slide?.field ?? '目前沒有可展示的抽籤結果'}</h2>
+        <div className="result-carousel-brand">
+          <img className="result-carousel-logo" src="/android-chrome-512x512.png" alt="國立臺中科技大學專題成果展" width={56} height={56} />
+          <div className="result-carousel-heading">
+            <p>國立臺中科技大學 · 專題報告抽籤結果</p>
+            <h2>{slide?.field ?? '目前沒有可展示的抽籤結果'}</h2>
+          </div>
         </div>
         <button onClick={onClose} className="result-control" aria-label="結束輪播，返回抽籤畫面"><X size={20} /><span>返回抽籤</span></button>
       </header>
