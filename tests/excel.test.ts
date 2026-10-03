@@ -47,17 +47,32 @@ test('replacing a roster keeps stable IDs for matching student leaders', async (
   assert.equal(reconciled[1].id, next[1].id);
 });
 
-test('exported file follows original codes across domains regardless of draw status or presentation order', async () => {
+test('exported file follows numeric draw codes across domains and places undrawn projects last', async () => {
   const base = (await parseExcelFile(makeFile([row]))).projects![0];
-  const codes = ['G01', 'B03', 'A100', 'B01', 'A03', 'A99', 'A01', 'A02', 'B02', 'C01', 'D01', 'E01', 'F01'];
+  const codes = ['Z01', 'B03', 'A100', 'B01', 'A03', 'A99', 'A01', 'A02', 'B02', 'C01', 'A10', null, undefined, ''];
   const projects = codes.map((code, i) => ({
-    ...base, id: `export-${i}`, seq_no: String(codes.length - i), original_code: code,
-    draw_order: i % 2 ? 1 : null, draw_code: i % 2 ? 'G99' : null,
+    ...base, id: `export-${i}`, seq_no: String(codes.length - i), original_code: `P${codes.length - i}`,
+    draw_order: code ? 1 : null, draw_code: code,
   }));
   const before = structuredClone(projects);
   const bytes = XLSX.write(createExportWorkbook(projects), { type: 'array', bookType: 'xlsx' });
   const workbook = XLSX.read(bytes, { type: 'array' });
   const exported = XLSX.utils.sheet_to_json<Record<string, string>>(workbook.Sheets[workbook.SheetNames[0]]);
-  assert.deepEqual(exported.map(p => p.編號), ['A01', 'A02', 'A03', 'A99', 'A100', 'B01', 'B02', 'B03', 'C01', 'D01', 'E01', 'F01', 'G01']);
+  assert.deepEqual(exported.map(p => p['+編號(抽籤後)']), ['A01', 'A02', 'A03', 'A10', 'A99', 'A100', 'B01', 'B02', 'B03', 'C01', 'Z01', '未抽籤', '未抽籤', '未抽籤']);
+  assert.deepEqual(exported.slice(-3).map(p => p.編號), ['P1', 'P2', 'P3']);
   assert.deepEqual(projects, before);
+});
+
+test('equal draw codes and all-undrawn rosters retain deterministic original-code and sequence ordering', async () => {
+  const base = (await parseExcelFile(makeFile([row]))).projects![0];
+  const projects = [
+    { ...base, id: 'a', seq_no: '10', original_code: 'A10', draw_code: 'Z01' },
+    { ...base, id: 'b', seq_no: '2', original_code: 'A02', draw_code: 'Z01' },
+    { ...base, id: 'c', seq_no: '1', original_code: 'A02', draw_code: 'Z01' },
+  ];
+  for (const items of [projects, projects.map(p => ({ ...p, draw_code: null }))]) {
+    const workbook = createExportWorkbook(items);
+    const rows = XLSX.utils.sheet_to_json<Record<string, string>>(workbook.Sheets[workbook.SheetNames[0]]);
+    assert.deepEqual(rows.map(p => p.序號), ['1', '2', '10']);
+  }
 });

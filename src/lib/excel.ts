@@ -157,10 +157,14 @@ export async function parseExcelFile(file: File): Promise<{
  * 序號 學制 系所 班級 指導老師 領域 編號 專題名稱 組長學號 +編號(抽籤後)
  */
 export function createExportWorkbook(projects: ProjectItem[]): XLSX.WorkBook {
-  // Export by original identifier (A01, A02, ... A100, B01), independent of draw order.
+  // Draw identifiers sort naturally (A02 before A10); undrawn projects follow last.
   const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
   const sortedProjects = [...projects].sort((a, b) => {
-    return collator.compare(a.original_code, b.original_code)
+    const left = a.draw_code?.trim() || '';
+    const right = b.draw_code?.trim() || '';
+    if (!!left !== !!right) return left ? -1 : 1;
+    return collator.compare(left, right)
+      || collator.compare(a.original_code, b.original_code)
       || collator.compare(a.seq_no, b.seq_no);
   });
 
