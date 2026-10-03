@@ -266,7 +266,10 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
     >
       <div hidden={carouselScope !== null} className={isFullscreen ? 'stage-fullscreen-layout' : 'space-y-5 sm:space-y-7'}>
       {isFullscreen && <header className="stage-presentation-header">
-        <div><p>國立臺中科技大學 · 資訊與流通學院</p><h1>專題報告抽籤現場</h1></div>
+        <div className="stage-presentation-brand">
+          <img className="stage-presentation-logo" src="/android-chrome-512x512.png" alt="國立臺中科技大學專題成果展" width={48} height={48} />
+          <div><p>國立臺中科技大學 · 資訊與流通學院</p><h1>專題報告抽籤現場</h1></div>
+        </div>
         <div className="stage-presentation-tools">
           <DomainScopePicker domains={domainConfigs} projects={projects} selected={selectedFields} disabled={isAnimating || isResetting} onChange={changeFields} />
           <button type="button" onClick={handleOpenResetModal} disabled={isAnimating || drawnPool.length === 0} aria-label="重設結果"><RotateCcw size={18} /></button>
