@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { apiRequest, ApiRequestError } from '../lib/api';
+import { ApiRequestError, isRequestCancelled } from '../lib/api';
+import { useApiRequest } from '../lib/useApiRequest';
 import { hasStudentSessionHint, rememberStudentSessionHint, clearStudentSessionHint } from '../lib/studentSessionHint';
 import { ProjectItem } from '../types';
 import {
@@ -28,6 +29,7 @@ function resultNumberSize(value: number | string | null | undefined): string {
 }
 
 export const StudentPortal: React.FC = () => {
+  const request = useApiRequest();
   const [studentIdInput, setStudentIdInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -39,19 +41,22 @@ export const StudentPortal: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingAction, setLoadingAction] = useState<'login' | 'refresh' | 'logout' | null>(null);
   const requestEpoch = useRef(0);
+  const sessionController = useRef<AbortController | null>(null);
 
   const onRefresh = async () => {
     if (isLoading) return;
+    sessionController.current?.abort();
     requestEpoch.current++;
     setIsLoading(true);
     setLoadingAction('refresh');
     try {
-      const data = await apiRequest<{ project: ProjectItem; sharedPasswordMode: boolean }>('/api/student/me');
+      const data = await request<{ project: ProjectItem; sharedPasswordMode: boolean }>('/api/student/me');
       setMyProject(data.project);
       setLastUpdatedAt(new Date());
       setSharedPasswordMode(data.sharedPasswordMode);
       setErrorMessage('');
     } catch (error) {
+      if (isRequestCancelled(error)) return;
       if (error instanceof ApiRequestError && error.status === 401) {
         clearStudentSessionHint();
         setMyProject(null);
@@ -64,40 +69,36 @@ export const StudentPortal: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     const epoch = requestEpoch.current;
-    const timer = window.setTimeout(() => {
-      cancelled = true;
-      if (requestEpoch.current !== epoch) return;
-      setErrorMessage('確認登入狀態逾時，請檢查網路連線後重新整理頁面。');
-      setIsCheckingSession(false);
-    }, 10000);
-    apiRequest<{ project: ProjectItem; sharedPasswordMode: boolean }>('/api/student/me')
+    const controller = new AbortController();
+    sessionController.current = controller;
+    request<{ project: ProjectItem; sharedPasswordMode: boolean }>('/api/student/me', undefined, { signal: controller.signal, timeoutMs: 10000 })
       .then(data => { if (!cancelled && requestEpoch.current === epoch) { if (!hasStudentSessionHint()) rememberStudentSessionHint(); setMyProject(data.project); setLastUpdatedAt(new Date()); setSharedPasswordMode(data.sharedPasswordMode); } })
       .catch(error => {
-        if (!cancelled && requestEpoch.current === epoch) {
+        if (!cancelled && !isRequestCancelled(error) && requestEpoch.current === epoch) {
           if (error instanceof ApiRequestError && error.status === 401) clearStudentSessionHint();
           else setErrorMessage(error instanceof Error ? error.message : '確認登入狀態失敗，請稍後再試。');
         }
       })
       .finally(() => {
-        window.clearTimeout(timer);
         if (!cancelled) setIsCheckingSession(false);
       });
-    return () => { cancelled = true; window.clearTimeout(timer); };
-  }, []);
+    return () => { cancelled = true; controller.abort(); };
+  }, [request]);
   const handleLogout = async () => {
     if (isLoading) return;
+    sessionController.current?.abort();
     requestEpoch.current++;
     setIsLoading(true);
     setLoadingAction('logout');
     try {
-      await apiRequest('/api/student/logout', {});
+      await request('/api/student/logout', {});
       clearStudentSessionHint();
       setMyProject(null);
       setSharedPasswordMode(false);
       setStudentIdInput('');
       setPasswordInput('');
       setErrorMessage('');
-    } catch (error) { setErrorMessage(error instanceof Error ? error.message : '登出失敗'); }
+    } catch (error) { if (!isRequestCancelled(error)) setErrorMessage(error instanceof Error ? error.message : '登出失敗'); }
     finally { setIsLoading(false); setLoadingAction(null); }
   };
 
@@ -118,18 +119,19 @@ export const StudentPortal: React.FC = () => {
       return;
     }
 
+    sessionController.current?.abort();
     requestEpoch.current++;
     setIsLoading(true);
     setLoadingAction('login');
     try {
-      const data = await apiRequest<{ project: ProjectItem; sharedPasswordMode: boolean }>('/api/student/verify', { leaderId: query, password: pwd });
+      const data = await request<{ project: ProjectItem; sharedPasswordMode: boolean }>('/api/student/verify', { leaderId: query, password: pwd });
       rememberStudentSessionHint();
       setMyProject(data.project);
       setLastUpdatedAt(new Date());
       setSharedPasswordMode(data.sharedPasswordMode);
       setPasswordInput('');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '登入失敗');
+      if (!isRequestCancelled(error)) setErrorMessage(error instanceof Error ? error.message : '登入失敗');
     } finally { setIsLoading(false); setLoadingAction(null); }
   };
 

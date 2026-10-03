@@ -2,11 +2,13 @@ import { useRef, useState } from 'react';
 import { FlaskConical, LoaderCircle, X } from 'lucide-react';
 import type { DomainConfig } from '../types';
 import type { LotteryTestResult } from '../lib/lotteryTest';
-import { apiRequest } from '../lib/api';
+import { isRequestCancelled } from '../lib/api';
+import { useApiRequest } from '../lib/useApiRequest';
 import { useModalFocus } from '../lib/useModalFocus';
 
 export function LotteryTestPanel({ version, configs, disabled }: { version: number | null; configs: DomainConfig[]; disabled: boolean }) {
   const [open, setOpen] = useState(false);
+  const request = useApiRequest(open);
   const [field, setField] = useState('ALL');
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<LotteryTestResult | null>(null);
@@ -17,8 +19,8 @@ export function LotteryTestPanel({ version, configs, disabled }: { version: numb
     if (running.current || version === null) return;
     running.current = true;
     setLoading(true); setReport(null); setError(null); setOpen(true);
-    try { setReport(await apiRequest<LotteryTestResult>('/api/lottery/test', { field: selected, version })); }
-    catch (err) { setError(err instanceof Error ? err.message : '測試失敗，請稍後再試。'); }
+    try { setReport(await request<LotteryTestResult>('/api/lottery/test', { field: selected, version })); }
+    catch (err) { if (!isRequestCancelled(err)) setError(err instanceof Error ? err.message : '測試失敗，請稍後再試。'); }
     finally { running.current = false; setLoading(false); }
   };
   return <>

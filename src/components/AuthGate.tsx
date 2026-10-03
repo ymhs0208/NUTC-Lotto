@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AuthSession, saveAuthSession } from '../lib/auth';
-import { apiRequest } from '../lib/api';
+import { isRequestCancelled } from '../lib/api';
+import { useApiRequest } from '../lib/useApiRequest';
 import {
   Lock,
   User,
@@ -20,6 +21,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({
   onSuccess,
 }) => {
   const isStage = targetView === 'stage';
+  const request = useApiRequest(targetView);
   const defaultUser = '';
 
   const [username, setUsername] = useState<string>(defaultUser);
@@ -31,17 +33,18 @@ export const AuthGate: React.FC<AuthGateProps> = ({
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
-      const data = await apiRequest<{ session: AuthSession }>('/api/auth/verify', {
+      const data = await request<{ session: AuthSession }>('/api/auth/verify', {
         username: username.trim(), password, targetView, remember: rememberMe,
       });
       const session = data.session;
       saveAuthSession(session);
       onSuccess(session);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '驗證失敗，請稍後再試');
+      if (!isRequestCancelled(error)) setErrorMessage(error instanceof Error ? error.message : '驗證失敗，請稍後再試');
     } finally {
       setIsSubmitting(false);
     }

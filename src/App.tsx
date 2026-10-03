@@ -5,7 +5,8 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { ProjectItem, ViewMode, DomainConfig } from './types';
-import { apiRequest, StoreState } from './lib/api';
+import { isRequestCancelled, StoreState } from './lib/api';
+import { useApiRequest } from './lib/useApiRequest';
 import { Navbar } from './components/Navbar';
 import { StudentPortal } from './components/StudentPortal';
 import { AuthGate } from './components/AuthGate';
@@ -25,6 +26,8 @@ const AdminManagement = lazy(() => import('./components/AdminManagement').then(m
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewMode>(() => getViewFromLocation(window.location));
+  const request = useApiRequest(currentView);
+  const loadControllerRef = useRef<AbortController | null>(null);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [domainConfigs, setDomainConfigs] = useState<DomainConfig[]>([]);
@@ -38,16 +41,17 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   useEffect(() => {
     let active = true;
-    apiRequest<{ session: AuthSession }>('/api/auth/me').then(data => {
+    request<{ session: AuthSession }>('/api/auth/me').then(data => {
       if (active) { saveAuthSession(data.session); setAuthSession(data.session); }
     }).catch(() => {}).finally(() => { if (active) setAuthReady(true); });
     return () => { active = false; };
-  }, []);
+  }, [request]);
 
   // Handle staff/admin logout
   const handleLogout = useCallback(async () => {
-    try { await apiRequest('/api/auth/logout', {}); }
-    catch (error) { setDataError(error instanceof Error ? error.message : '登出失敗，請重試'); return; }
+    try { await request('/api/auth/logout', {}); }
+    catch (error) { if (!isRequestCancelled(error)) setDataError(error instanceof Error ? error.message : '登出失敗，請重試'); return; }
+    loadControllerRef.current?.abort();
     clearAuthSession();
     loadRequestIdRef.current++;
     setAuthSession(null);
@@ -57,7 +61,7 @@ export default function App() {
     dataVersionRef.current = null;
     setDataVersion(null);
     handleSelectView('student');
-  }, []);
+  }, [request]);
 
   const handleSelectView = useCallback((view: ViewMode) => {
     const target = viewPath(view);
@@ -100,6 +104,9 @@ export default function App() {
   };
 
   const loadData = useCallback(async () => {
+    loadControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadControllerRef.current = controller;
     const requestId = ++loadRequestIdRef.current;
     if (!getAuthSession()) {
       setProjects([]);
@@ -113,18 +120,18 @@ export default function App() {
     }
     setIsLoading(true);
     try {
-      const state = await apiRequest<StoreState>('/api/state');
+      const state = await request<StoreState>('/api/state', undefined, { signal: controller.signal });
       if (requestId === loadRequestIdRef.current && getAuthSession()) applyState(state);
     } catch (error) {
-      if (requestId === loadRequestIdRef.current) setDataError(error instanceof Error ? error.message : '資料載入失敗');
+      if (!isRequestCancelled(error) && requestId === loadRequestIdRef.current) setDataError(error instanceof Error ? error.message : '資料載入失敗');
     } finally {
       if (requestId === loadRequestIdRef.current) setIsLoading(false);
     }
-  }, []);
+  }, [request]);
 
-  useEffect(() => { void loadData(); }, [loadData, authSession]);
+  useEffect(() => { void loadData(); return () => { loadControllerRef.current?.abort(); }; }, [loadData, authSession]);
   useEffect(() => {
-    const expired = () => { loadRequestIdRef.current++; setAuthSession(null); setProjects([]); setDomainConfigs([]); setSharedPasswordEnabled(false); dataVersionRef.current = null; setDataVersion(null); };
+    const expired = () => { loadControllerRef.current?.abort(); loadRequestIdRef.current++; setAuthSession(null); setProjects([]); setDomainConfigs([]); setSharedPasswordEnabled(false); dataVersionRef.current = null; setDataVersion(null); };
     window.addEventListener('auth-expired', expired);
     return () => window.removeEventListener('auth-expired', expired);
   }, []);
@@ -132,16 +139,16 @@ export default function App() {
   const handleSaveProjects = async (updated: ProjectItem[]) => {
     try {
       if (dataVersion === null) throw new Error('資料尚未載入，請重新整理。');
-      applyState(await apiRequest('/api/projects', { projects: updated, version: dataVersion }));
+      applyState(await request('/api/projects', { projects: updated, version: dataVersion }));
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : '儲存失敗');
+      if (!isRequestCancelled(error)) setDataError(error instanceof Error ? error.message : '儲存失敗');
       throw error;
     }
   };
 
   const handleSharedPassword = async (action: 'generate' | 'clear') => {
     if (dataVersion === null) throw new Error('資料尚未載入，請重新整理。');
-    const state = await apiRequest<StoreState & { password?: string }>('/api/student/shared-password', { action, version: dataVersion });
+    const state = await request<StoreState & { password?: string }>('/api/student/shared-password', { action, version: dataVersion });
     applyState(state);
     return state.password;
   };
@@ -152,9 +159,9 @@ export default function App() {
   ) => {
     try {
       if (dataVersion === null) throw new Error('資料尚未載入，請重新整理。');
-      applyState(await apiRequest('/api/domain-configs', { domainConfigs: newConfigs, renamedField, version: dataVersion }));
+      applyState(await request('/api/domain-configs', { domainConfigs: newConfigs, renamedField, version: dataVersion }));
     } catch (error) {
-      setDataError(error instanceof Error ? error.message : '儲存失敗');
+      if (!isRequestCancelled(error)) setDataError(error instanceof Error ? error.message : '儲存失敗');
       throw error;
     }
   };
