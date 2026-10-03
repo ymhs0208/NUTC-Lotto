@@ -46,9 +46,9 @@ npm run deploy:check
 npm run deploy
 ```
 
-`wrangler.jsonc` 保留既有 Worker 名稱 `special-exhibition-lottery` 與自訂網域 `nutc.cc.cd`。部署使用新增的 `v2` migration 建立 `LotteryDatabase`，並保留既有 `v1` 的 API 與限流物件。資料庫 schema 在物件首次啟動時自動建立，不需要手動執行 SQL 或填 D1 ID。
+`wrangler.jsonc` 保留既有 Worker 名稱 `special-exhibition-lottery`，自訂網域設為 `lottery.nutc.cc.cd`。部署使用新增的 `v2` migration 建立 `LotteryDatabase`，並保留既有 `v1` 的 API 與限流物件。資料庫 schema 在物件首次啟動時自動建立，不需要手動執行 SQL 或填 D1 ID。
 
-部署後以正式 `TARGET_URL=https://nutc.cc.cd` 與正式 `SETUP_TOKEN` 執行帳號設定，再關閉設定端點：
+部署後以正式 `TARGET_URL=https://lottery.nutc.cc.cd` 與正式 `SETUP_TOKEN` 執行帳號設定，再關閉設定端點：
 
 ```sh
 npx wrangler secret delete SETUP_TOKEN
