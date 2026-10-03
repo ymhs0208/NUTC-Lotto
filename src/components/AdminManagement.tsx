@@ -563,8 +563,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
     const cleanLeaderId = formData.leader_id.trim();
     const finalPassword = sharedPasswordEnabled ? '' : formData.password || '';
-    if (finalPassword && (finalPassword.trim().length < 12 || finalPassword.length > 128 || finalPassword === cleanLeaderId)) {
-      setFormValidationNotice('新密碼須為 12 至 128 字元，且不可使用學號。');
+    if (finalPassword && (finalPassword.trim().length < 8 || finalPassword.length > 128 || finalPassword === cleanLeaderId)) {
+      setFormValidationNotice('新密碼須為 8 至 128 字元，且不可使用學號。');
       return;
     }
 
@@ -1878,9 +1878,9 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     aria-describedby="project-password-help"
                     value={formData.password || ''}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="輸入至少 12 字元的新密碼"
+                    placeholder="輸入至少 8 字元的新密碼"
                     autoComplete="new-password"
-                    minLength={12}
+                    minLength={8}
                     maxLength={128}
                     className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                   />

@@ -29,6 +29,10 @@ test('imports never invent predictable passwords and reject weak passwords or ex
   assert.equal(blank.success, true); assert.equal(blank.projects![0].password, '');
   const weak = await parseExcelFile(makeFile([{ ...row, 組長密碼: '5678' }]));
   assert.equal(weak.success, false);
+  assert.equal((await parseExcelFile(makeFile([{ ...row, 組長密碼: 'Abc1234' }]))).success, false);
+  const eightCharacter = await parseExcelFile(makeFile([{ ...row, 組長密碼: 'Abc12345' }]));
+  assert.equal(eightCharacter.success, true); assert.equal(eightCharacter.projects![0].password, 'Abc12345');
+  assert.equal((await parseExcelFile(makeFile([{ ...row, 組長密碼: row.組長學號 }]))).success, false);
   const oversized = new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'oversized.xlsx');
   assert.equal((await parseExcelFile(oversized)).success, false);
   assert.equal((await parseExcelFile(makeFile(Array.from({ length: 2001 }, () => row)))).success, false);

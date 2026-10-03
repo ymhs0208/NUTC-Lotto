@@ -21,10 +21,10 @@ test('Workers persists data, authenticates staff/students and atomically enforce
     const req = worker.request;
     assert.equal((await req('/api/state')).status, 401);
     assert.equal((await req('/api/cloudflare/setup', { action: 'accounts' })).status, 401);
-    const passwordHash = await hashPassword('Secure-staff-password');
+    const passwordHash = await hashPassword('Abc12345');
     const accounts = [{ id: 'admin-id', email: 'admin@example.edu.tw', role: 'admin', password_hash: passwordHash }, { id: 'stage-id', email: 'stage@example.edu.tw', role: 'stage', password_hash: passwordHash }];
     assert.equal((await worker.setup({ action: 'accounts', accounts })).status, 200);
-    const login = (username: string, targetView = 'admin', password = 'Secure-staff-password') => req('/api/auth/verify', { username, password, targetView, remember: true });
+    const login = (username: string, targetView = 'admin', password = 'Abc12345') => req('/api/auth/verify', { username, password, targetView, remember: true });
     assert.equal((await login('admin@example.edu.tw', 'admin', 'wrong')).status, 401);
     assert.equal((await login('stage@example.edu.tw')).status, 403);
     const admin = await login(' ADMIN@example.edu.tw '); assert.equal(admin.status, 200);
@@ -35,7 +35,7 @@ test('Workers persists data, authenticates staff/students and atomically enforce
     const empty = (await req('/api/state', undefined, adminCookie)).data;
     assert.equal(empty.version, 0); assert.deepEqual(empty.projects, []); assert.equal(empty.domainConfigs.length, 7);
     const configured = await req('/api/domain-configs', { version: 0, domainConfigs: domains }, adminCookie); assert.equal(configured.status, 200);
-    const roster = [{ ...project, password: 'Secure-student-password' }, { ...project, id: 'p2', leader_id: '87654321', original_code: 'T02', project_title: '第二組專題', password: 'Secure-student-password' }];
+    const roster = [{ ...project, password: 'Xyz12345' }, { ...project, id: 'p2', leader_id: '87654321', original_code: 'T02', project_title: '第二組專題', password: 'Xyz12345' }];
     assert.equal((await req('/api/projects', { version: 1, projects: roster }, adminCookie)).status, 200);
     const initial = (await req('/api/state', undefined, adminCookie)).data;
     assert.equal(initial.version, 2); assert.equal(initial.projects[0].password_hash, undefined); assert.equal(initial.projects[0].password_set, true);
@@ -46,9 +46,9 @@ test('Workers persists data, authenticates staff/students and atomically enforce
     assert.equal((await req('/api/domain-configs', { version: 2, domainConfigs: domains }, adminCookie, { Origin: 'https://evil.invalid' })).status, 403);
     const competing = await Promise.all([req('/api/domain-configs', { version: 2, domainConfigs: domains }, adminCookie), req('/api/domain-configs', { version: 2, domainConfigs: domains }, adminCookie)]);
     assert.deepEqual(competing.map(r => r.status).sort(), [200, 409]);
-    const student = await req('/api/student/verify', { leaderId: project.leader_id, password: 'Secure-student-password' });
+    const student = await req('/api/student/verify', { leaderId: project.leader_id, password: 'Xyz12345' });
     assert.equal(student.status, 200); assert.equal(student.data.project.leader_id, project.leader_id); assert.equal(student.data.project.advisor, ''); assert.equal(student.data.project.password_hash, undefined);
-    const otherStudent = await req('/api/student/verify', { leaderId: '87654321', password: 'Secure-student-password' }); assert.equal(otherStudent.status, 200); assert.notEqual(student.cookie, otherStudent.cookie);
+    const otherStudent = await req('/api/student/verify', { leaderId: '87654321', password: 'Xyz12345' }); assert.equal(otherStudent.status, 200); assert.notEqual(student.cookie, otherStudent.cookie);
     assert.equal((await req('/api/student/me?projectId=p2', undefined, student.cookie)).data.project.leader_id, project.leader_id);
     const beforeTest = (await req('/api/state', undefined, adminCookie)).data;
     assert.equal((await req('/api/lottery/test', { version: beforeTest.version }, stageCookie)).status, 403);

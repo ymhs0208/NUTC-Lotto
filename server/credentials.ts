@@ -14,8 +14,8 @@ const derive = (password: string, salt: string) => hashExecutor.run(() => new Pr
 }));
 
 export function validatePassword(password: string, leaderId: string): void {
-  if (password.trim().length < 12 || password.length > 128 || password === leaderId || password === leaderId.slice(-4)) {
-    throw new ApiError(400, '學生密碼須為 12 至 128 字元，不可使用學號或學號後四碼。');
+  if (password.trim().length < 8 || password.length > 128 || password === leaderId || password === leaderId.slice(-4)) {
+    throw new ApiError(400, '學生密碼須為 8 至 128 字元，不可使用學號或學號後四碼。');
   }
 }
 export async function hashPassword(password: string): Promise<string> {

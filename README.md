@@ -24,7 +24,7 @@ React + Vite 前端與 Express API，全套後端使用 Cloudflare Workers、Sta
 ]
 ```
 
-密碼須為 12 至 128 字元。CLI 在本機計算雜湊，只將雜湊送至 Cloudflare。執行：
+密碼須為 8 至 128 字元。CLI 在本機計算雜湊，只將雜湊送至 Cloudflare。執行：
 
 ```sh
 TARGET_URL=https://localhost:3000 SETUP_TOKEN='<與 .dev.vars 相同的值>' npm run accounts:setup -- data/staff-accounts.json

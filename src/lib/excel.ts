@@ -114,7 +114,7 @@ export async function parseExcelFile(file: File): Promise<{
       const drawCodeVal = drawCodeKey && row[drawCodeKey] ? String(row[drawCodeKey]).trim() : null;
       const parsedPassword = passwordKey && row[passwordKey] ? String(row[passwordKey]).trim() : '';
       const password = parsedPassword;
-      if (password && (password.length < 12 || password.length > 128 || password === leaderId)) throw new Error(`第 ${index + 2} 列密碼須為 12 至 128 字元且不可使用學號。`);
+      if (password && (password.length < 8 || password.length > 128 || password === leaderId)) throw new Error(`第 ${index + 2} 列密碼須為 8 至 128 字元且不可使用學號。`);
 
       projects.push({
         id: `imported-${Date.now()}-${index + 1}`,

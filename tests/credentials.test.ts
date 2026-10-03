@@ -17,7 +17,11 @@ test('student passwords are salted, verified exactly, and never retained in plai
   assert.equal(preserved.password_hash, stored.password_hash);
   const [changedLeader] = await prepareProjects([{ ...p, leader_id: '87654321' }], [stored]);
   assert.equal(changedLeader.password_hash, undefined);
-  await assert.rejects(prepareProjects([{ ...p, password: '5678' }], []), /12 至 128/);
+  await assert.rejects(prepareProjects([{ ...p, password: '5678' }], []), /8 至 128/);
+  await assert.rejects(prepareProjects([{ ...p, password: 'Abc1234' }], []), /8 至 128/);
+  await assert.rejects(prepareProjects([{ ...p, password: p.leader_id }], []), /不可使用學號/);
+  const [eightCharacter] = await prepareProjects([{ ...p, password: 'Abc12345' }], []);
+  assert.ok(await verifyPassword('Abc12345', eightCharacter.password_hash));
   const [legacy] = removeLegacyCredentials([{ ...p, password: 'old-password' }]);
   assert.equal(legacy.password, undefined); assert.equal(legacy.password_hash, undefined);
 });

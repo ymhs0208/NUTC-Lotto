@@ -9,7 +9,7 @@ async function main() {
   const input = JSON.parse(await readFile(file, 'utf8'));
   if (!Array.isArray(input) || !input.length || input.length > 100) throw new Error('帳號檔案須為 1 至 100 筆陣列。');
   for (const a of input) {
-    if (!a || typeof a.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email.trim()) || a.email.length > 256 || !['admin', 'stage'].includes(a.role) || typeof a.password !== 'string' || a.password.trim().length < 12 || a.password.length > 128) throw new Error('帳號須包含有效 email、admin/stage role 與 12 至 128 字元密碼。');
+    if (!a || typeof a.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email.trim()) || a.email.length > 256 || !['admin', 'stage'].includes(a.role) || typeof a.password !== 'string' || a.password.trim().length < 8 || a.password.length > 128) throw new Error('帳號須包含有效 email、admin/stage role 與 8 至 128 字元密碼。');
   }
   const accounts = [];
   for (const a of input) accounts.push({ id: randomUUID(), email: a.email.trim().toLowerCase(), role: a.role, password_hash: await hashPassword(a.password) });
