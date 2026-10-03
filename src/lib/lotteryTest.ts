@@ -43,7 +43,7 @@ export function testLottery(projects: ProjectItem[], configs: DomainConfig[], fi
       else if (names.some(name => !normalizeProfessorName(name))) result.issues.push({ level: 'warning', message: `第 ${group} 組含空白或只有職稱的評審姓名，請修正設定。` });
     }
     try {
-      const drawn = allocateDomainSubgroups(items, groupCount, name, cfg?.evaluatorsPerGroup || {}, cfg?.groupCapacities);
+      const drawn = allocateDomainSubgroups(items, groupCount, name, cfg?.evaluatorsPerGroup || {}, cfg?.groupCapacities, cfg?.drawPrefix);
       for (const p of drawn) {
         result.groups[p.assigned_group! - 1].count++;
         if (isAdvisorConflict(p.advisor, p.evaluators)) result.issues.push({ level: 'error', message: `${p.original_code}「${p.project_title}」在第 ${p.assigned_group} 組與指導老師有利益衝突。` });

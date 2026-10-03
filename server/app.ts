@@ -15,6 +15,8 @@ import { LotteryAllocationError } from '../src/lib/groupCapacities';
 import { resolveLotteryFields } from './lotteryScope';
 import { domainDeletionError } from '../src/lib/domainDeletion';
 import { testLottery } from '../src/lib/lotteryTest';
+import { getDomainCode } from '../src/lib/domainCodes';
+import { relabelDomainResults } from '../src/lib/drawCodes';
 
 export const app = express();
 const SHARED_PASSWORD_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -93,7 +95,7 @@ function staffState(state: DatabaseState, role: 'admin' | 'stage') {
   };
   if (role === 'stage') return {
     ...base,
-    domainConfigs: state.domainConfigs.map(c => ({ id: c.id, field: c.field, groupCount: c.groupCount, ...(c.groupCapacities ? { groupCapacities: c.groupCapacities } : {}) })),
+    domainConfigs: state.domainConfigs.map(c => ({ id: c.id, field: c.field, drawPrefix: c.drawPrefix, groupCount: c.groupCount, ...(c.groupCapacities ? { groupCapacities: c.groupCapacities } : {}) })),
     projects: state.projects.map(stageProjectDto),
   };
   return {
@@ -219,6 +221,10 @@ app.post('/api/domain-configs', route(async (req, res) => {
   if (renamed && (typeof renamed.oldName !== 'string' || typeof renamed.newName !== 'string')) throw new ApiError(400, '領域更名格式不正確。');
   const deletionError = domainDeletionError(state.projects, state.domainConfigs, req.body.domainConfigs);
   if (deletionError) throw new ApiError(409, deletionError);
+  const changedPrefixes = (req.body.domainConfigs as typeof state.domainConfigs).filter(cfg => {
+    const previous = state.domainConfigs.find(c => c.id === cfg.id);
+    return previous && getDomainCode(previous.field, previous.drawPrefix) !== getDomainCode(cfg.field, cfg.drawPrefix);
+  });
   if (renamed) state.projects = state.projects.map(p => p.field === renamed.oldName ? { ...p, field: renamed.newName } : p);
   const removedFields = state.domainConfigs.filter(c => !req.body.domainConfigs.some((next: { id: string }) => next.id === c.id)).map(c => c.field);
   state.domainConfigs = req.body.domainConfigs;
@@ -238,6 +244,7 @@ app.post('/api/domain-configs', route(async (req, res) => {
       throw new ApiError(409, `「${cfg.field}」已有抽籤結果與各組設定件數不符，請先重設此領域再修改每組件數。`);
     }
   }
+  for (const cfg of changedPrefixes) state.projects = relabelDomainResults(state.projects, cfg.field, cfg.drawPrefix);
   res.json(staffState(await store.save(state, state.version), 'admin'));
 }));
 app.post('/api/lottery/test', route(async (req, res) => {

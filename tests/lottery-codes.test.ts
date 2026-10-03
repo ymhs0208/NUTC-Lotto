@@ -4,11 +4,49 @@ import { allocateDomainSubgroups, executeAllDomainsIndependentLottery, getDomain
 import { createExportWorkbook } from '../src/lib/excel';
 import * as XLSX from 'xlsx';
 import type { ProjectItem } from '../src/types';
+import { relabelDomainResults } from '../src/lib/drawCodes';
+import { testLottery } from '../src/lib/lotteryTest';
+import { validateDomains } from '../server/store';
 
 const fields = ['企業智慧化', '數位內容與多媒體應用', '網路應用與資通安全', '嵌入式系統與行動計算', '智慧運算創新應用', '智慧流通應用與研究', '進修部'];
 const makeProject = (field: string, index: number): ProjectItem => ({
   id: `${field}-${index}`, seq_no: String(index + 1), field, leader_id: `${field}-${index}`,
   education_system: '', department: '', class_name: '', advisor: '', original_code: '', project_title: '測試',
+});
+
+test('custom result prefixes are used by real and test draws without changing original codes', () => {
+  const projects = Array.from({ length: 6 }, (_, i) => ({ ...makeProject('企業智慧化', i), original_code: `A0${i + 1}` }));
+  const configs = [{ id: 'd', field: '企業智慧化', groupCount: 2, drawPrefix: 'Z' }];
+  const drawn = executeAllDomainsIndependentLottery(projects, configs).updatedProjects;
+  assert.deepEqual(new Set(drawn.map(p => p.draw_code)), new Set(['Z01', 'Z02', 'Z03', 'Z04', 'Z05', 'Z06']));
+  assert.deepEqual(drawn.map(p => p.original_code), projects.map(p => p.original_code));
+  const preview = testLottery(projects, configs, 'ALL', 1);
+  assert.ok(preview.domains[0].preview.every(p => p.drawCode.startsWith('Z')));
+});
+
+test('relabeling existing draws preserves assignments, timestamps, roster order and undrawn projects', () => {
+  const drawn = allocateDomainSubgroups(Array.from({ length: 101 }, (_, i) => makeProject('企業智慧化', i)), 3, '企業智慧化');
+  const projects = [...drawn].reverse().concat(makeProject('企業智慧化', 102), makeProject('進修部', 103));
+  const updated = relabelDomainResults(projects, '企業智慧化', 'H');
+  updated.forEach((p, i) => {
+    const { draw_code: _afterCode, ...after } = p;
+    const { draw_code: _beforeCode, ...before } = projects[i];
+    assert.deepEqual(after, before);
+    if (!p.assigned_group) assert.equal(p, projects[i]);
+    if (p.assigned_group) assert.equal(p.draw_code, projects[i].draw_code!.replace(/^A/, 'H'));
+  });
+  assert.ok(updated.some(p => p.draw_code === 'H101'));
+  assert.deepEqual(relabelDomainResults(updated, '企業智慧化'), projects);
+});
+
+test('domain prefixes reject invalid values and collisions with legacy defaults', () => {
+  const config = { id: 'd', field: '自訂領域', groupCount: 2 };
+  for (const drawPrefix of ['a', 'AB', '', '1', 'Ａ', null, 1]) {
+    assert.throws(() => validateDomains([{ ...config, drawPrefix }]));
+  }
+  validateDomains([{ ...config, drawPrefix: 'Z' }]);
+  assert.throws(() => validateDomains([{ ...config, drawPrefix: 'A' }, { id: 'other', field: '企業智慧化', groupCount: 2 }]), /重複/);
+  assert.throws(() => validateDomains([{ ...config, drawPrefix: 'Z' }, { id: 'other', field: '另一領域', groupCount: 2, drawPrefix: 'Z' }]), /重複/);
 });
 
 test('all seven domains have unique compact codes across groups and keep local presentation order', () => {

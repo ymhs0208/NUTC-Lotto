@@ -39,12 +39,13 @@ export function allocateDomainSubgroups(
   groupCount: number,
   domainField: string,
   evaluatorsPerGroup: Record<number, string[]> = {},
-  groupCapacities?: Record<number, number>
+  groupCapacities?: Record<number, number>,
+  drawPrefix?: string
 ): ProjectItem[] {
   const k = Math.max(1, groupCount);
   const now = new Date().toISOString();
   const domainPrefix = domainField.slice(0, 4);
-  const domainCode = getDomainCode(domainField);
+  const domainCode = getDomainCode(domainField, drawPrefix);
   if (groupCapacities !== undefined) {
     validateGroupCapacities(groupCapacities, k, domainField);
     const total = Object.values(groupCapacities).reduce((sum, count) => sum + count, 0);
@@ -186,7 +187,8 @@ export function executeAllDomainsIndependentLottery(
       groupCount,
       fieldName,
       evaluatorsPerGroup,
-      cfg?.groupCapacities
+      cfg?.groupCapacities,
+      cfg?.drawPrefix
     );
 
     // Verify conflict of interest

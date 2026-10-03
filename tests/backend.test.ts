@@ -60,6 +60,19 @@ test('Workers persists data, authenticates staff/students and atomically enforce
     assert.deepEqual(Object.keys(publicResults.data.results[0]).sort(), ['assigned_group', 'draw_code', 'draw_order', 'field', 'original_code']);
     assert.equal((await req('/api/lottery/reset', { version: beforeTest.version }, stageCookie)).status, 409);
     const current = (await req('/api/state', undefined, adminCookie)).data;
+    const relabeled = await req('/api/domain-configs', { version: current.version, domainConfigs: [{ ...domains[0], drawPrefix: 'Z' }] }, adminCookie);
+    assert.equal(relabeled.status, 200);
+    assert.equal(relabeled.data.domainConfigs[0].drawPrefix, 'Z');
+    assert.equal((await req('/api/state', undefined, stageCookie)).data.domainConfigs[0].drawPrefix, 'Z');
+    relabeled.data.projects.forEach((p: any) => {
+      const before = current.projects.find((old: any) => old.id === p.id);
+      assert.match(p.draw_code, /^Z\d{2}$/);
+      assert.equal(p.assigned_group, before.assigned_group);
+      assert.equal(p.draw_order, before.draw_order);
+      assert.equal(p.draw_time, before.draw_time);
+      assert.equal(p.original_code, before.original_code);
+    });
+    Object.assign(current, relabeled.data);
     const resetPassword = await req('/api/projects', { version: current.version, projects: current.projects.map((p: any) => p.id === 'p1' ? { ...p, password: 'Changed-student-password' } : p) }, adminCookie);
     assert.equal(resetPassword.status, 200);
     assert.equal((await req('/api/student/me', undefined, student.cookie)).status, 401);

@@ -8,7 +8,8 @@ const DOMAIN_CODES = new Map([
   ['進修部', 'G'],
 ]);
 
-export function getDomainCode(field: string): string | undefined {
+export function getDomainCode(field: string, drawPrefix?: string): string | undefined {
+  if (drawPrefix) return drawPrefix;
   const name = field.trim().replace(/^[A-G][.．]\s*/, '').replace(/[、，,]+$/, '').trim();
   return DOMAIN_CODES.get(name);
 }

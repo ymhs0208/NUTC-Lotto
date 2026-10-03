@@ -29,6 +29,7 @@ export interface DomainStats {
 export interface DomainConfig {
   id: string;
   field: string;
+  drawPrefix?: string; // 自訂抽籤結果英文字母；未設定沿用領域預設值
   groupCount: number; // 評審分組組數
   groupCapacities?: Record<number, number>; // 指定各組專題件數；未設定沿用自動分組
   evaluatorsPerGroup?: Record<number, string[]>; // 每一個分組 (1..N) 的評分教授清單

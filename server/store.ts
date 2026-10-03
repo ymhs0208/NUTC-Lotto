@@ -5,6 +5,7 @@ import type { StaffAccount, StaffSession, StudentSession } from './cloudflareDat
 import { normalizeProfessorName } from '../src/lib/lottery';
 import { LotteryAllocationError, validateGroupCapacities } from '../src/lib/groupCapacities';
 import { ApiError } from './errors';
+import { getDomainCode } from '../src/lib/domainCodes';
 export { ApiError } from './errors';
 
 export interface PublicResult {
@@ -81,8 +82,13 @@ export function validateDomains(value: unknown): asserts value is DomainConfig[]
   if (value.length > 100) throw new ApiError(400, '領域設定最多 100 筆。');
   const ids = new Set<string>();
   const fields = new Set<string>();
+  const prefixes = new Set<string>();
   for (const c of value) {
     if (!c || typeof c.id !== 'string' || !c.id.trim() || typeof c.field !== 'string' || !c.field.trim() || c.id.length > 512 || c.field.length > 512 || ids.has(c.id) || fields.has(c.field) || !Number.isInteger(c.groupCount) || c.groupCount < 1 || c.groupCount > 50) throw new ApiError(400, '領域 ID、名稱不得重複，組數須為 1 至 50。');
+    if (c.drawPrefix !== undefined && (typeof c.drawPrefix !== 'string' || !/^[A-Z]$/.test(c.drawPrefix))) throw new ApiError(400, '抽籤結果字母須為 A 至 Z 的單一大寫英文字母。');
+    const prefix = getDomainCode(c.field, c.drawPrefix);
+    if (prefix && prefixes.has(prefix)) throw new ApiError(400, `抽籤結果字母 ${prefix} 重複，請為各領域設定不同字母。`);
+    if (prefix) prefixes.add(prefix);
     if (c.groupCapacities !== undefined) {
       try { validateGroupCapacities(c.groupCapacities, c.groupCount, c.field); }
       catch (error) {

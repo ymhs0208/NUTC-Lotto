@@ -145,6 +145,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     ? domainDeletionError(projects, domainConfigs, domainConfigs.filter(config => config.id !== domainToDelete.id))
     : null;
   const [domainFormName, setDomainFormName] = useState<string>('');
+  const [domainFormPrefix, setDomainFormPrefix] = useState('');
   const [domainFormGroupCount, setDomainFormGroupCount] = useState<number>(2);
   const [domainFormOrder, setDomainFormOrder] = useState<number>(1);
   const [domainManualCounts, setDomainManualCounts] = useState(false);
@@ -247,6 +248,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     beginDraft();
     setEditingDomain(null);
     setDomainFormName('');
+    setDomainFormPrefix('');
     setDomainFormOrder(domainConfigs.length + 1);
     setDomainFormGroupCount(2);
     setDomainManualCounts(false);
@@ -260,6 +262,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     beginDraft();
     setEditingDomain(cfg);
     setDomainFormName(cfg.field);
+    setDomainFormPrefix(cfg.drawPrefix || getDomainCode(cfg.field) || '');
     setDomainFormOrder(domainConfigs.findIndex(c => c.id === cfg.id) + 1);
     setDomainFormGroupCount(cfg.groupCount);
     setDomainManualCounts(!!cfg.groupCapacities);
@@ -323,6 +326,12 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       setDomainFormError('請輸入領域名稱！');
       return;
     }
+    const drawPrefix = domainFormPrefix || undefined;
+    const effectivePrefix = getDomainCode(cleanName, drawPrefix);
+    if (effectivePrefix && domainConfigs.some(c => c.id !== editingDomain?.id && getDomainCode(c.field, c.drawPrefix) === effectivePrefix)) {
+      setDomainFormError(`抽籤結果字母 ${effectivePrefix} 已被其他領域使用，請選擇不同字母。`);
+      return;
+    }
     if (!Number.isInteger(domainFormGroupCount) || domainFormGroupCount < 1 || domainFormGroupCount > 50) {
       setDomainFormError('分組組數須為 1 至 50 組的整數！');
       return;
@@ -364,7 +373,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       if (!current) throw new Error('此領域已不存在，請重新整理後再操作。');
       const updatedConfigs = domainConfigs.filter(c => c.id !== editingDomain.id);
       updatedConfigs.splice(domainFormOrder - 1, 0, {
-        ...current, field: cleanName, groupCount: Number(domainFormGroupCount), groupCapacities,
+        ...current, field: cleanName, drawPrefix, groupCount: Number(domainFormGroupCount), groupCapacities,
         evaluatorsPerGroup: Object.fromEntries(Object.entries(current.evaluatorsPerGroup || {})
           .filter(([group]) => /^[1-9]\d*$/.test(group) && Number(group) <= domainFormGroupCount)),
       });
@@ -392,6 +401,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       const newDomain: DomainConfig = {
         id: `domain-${Date.now()}`,
         field: cleanName,
+        drawPrefix,
         groupCount: Number(domainFormGroupCount),
         evaluatorsPerGroup: {},
         groupCapacities,
@@ -903,6 +913,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     <h3 className="text-sm font-bold text-slate-900 truncate">
                       {stat.field}
                     </h3>
+                    <p className="mt-1 text-xs text-slate-500">結果字母：<span className="font-mono font-semibold text-slate-700">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || '領域名稱'}</span></p>
                     <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500 font-mono">
                       <span>專題: <strong className="text-slate-800 font-bold">{stat.count}</strong> 件</span>
                       <span className="text-slate-300">·</span>
@@ -1019,6 +1030,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     </td>
                     <td className="py-2 px-4 text-slate-800 border border-slate-200">
                       <span className="font-semibold text-slate-900">{stat.field}</span>
+                      <span className="ml-2 font-mono text-xs text-slate-500">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || ''}</span>
                     </td>
                     <td className="py-2 px-4 text-center font-mono font-bold text-slate-900 border border-slate-200">
                       {stat.count}
@@ -1563,6 +1575,25 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                   placeholder="例如：智慧車聯網與AIoT"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="domain-draw-prefix" className="block text-slate-700 mb-1 font-semibold">
+                  抽籤結果英文字母
+                </label>
+                <select
+                  id="domain-draw-prefix"
+                  value={domainFormPrefix}
+                  onChange={e => { setDomainFormPrefix(e.target.value); setDomainFormError(null); }}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                >
+                  <option value="">沿用預設{getDomainCode(domainFormName) ? `（${getDomainCode(domainFormName)}）` : '（領域名稱）'}</option>
+                  {Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)).map(letter => {
+                    const used = domainConfigs.some(c => c.id !== editingDomain?.id && getDomainCode(c.field, c.drawPrefix) === letter);
+                    return <option key={letter} value={letter} disabled={used}>{letter}{used ? '（已使用）' : ''}</option>;
+                  })}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">編號預覽：{getDomainCode(domainFormName, domainFormPrefix) || domainFormName.slice(0, 4) || '領域'}{getDomainCode(domainFormName, domainFormPrefix) ? '01' : '-第1組-序號01'}</p>
               </div>
 
               <div>
