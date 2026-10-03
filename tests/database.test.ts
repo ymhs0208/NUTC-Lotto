@@ -1,145 +1,74 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
-import { PGlite } from '@electric-sql/pglite';
+import { DatabaseSync } from 'node:sqlite';
+import type { DurableObjectState } from '@cloudflare/workers-types';
+import { LotteryDatabase } from '../server/cloudflareDatabase';
 
-const directory = new URL('../supabase/migrations/', import.meta.url);
-const project = (id: string, leader = id) => ({
-  id, leader_id: leader, seq_no: id, education_system: '四技', department: '資管',
-  class_name: '甲', advisor: '王教授', field: '企業智慧化', original_code: `A${id}`,
-  project_title: `專題 ${id}`, assigned_group: 2, draw_order: 1, draw_code: 'A01',
-  draw_time: '2026-10-02T00:00:00.000Z', evaluators: ['李教授'],
-  password_hash: `scrypt-v1$${'a'.repeat(32)}$${'b'.repeat(64)}`,
-});
-async function database() {
-  const db = new PGlite();
-  await db.exec('create role anon; create role authenticated; create role service_role; create schema auth; create table auth.users(id uuid primary key);');
-  for (const file of (await readdir(directory)).sort().filter(file => file.endsWith('.sql') && !file.startsWith('20261002'))) {
-    await db.exec(await readFile(new URL(file, directory), 'utf8'));
-  }
-  return db;
+function database() {
+  const sqlite = new DatabaseSync(':memory:');
+  let alarm: number | null = null;
+  const alarmCalls: number[] = [];
+  const storage = {
+    sql: { exec(query: string, ...bindings: any[]) {
+      if (!bindings.length && query.includes('CREATE TABLE')) { sqlite.exec(query); return { toArray: () => [] }; }
+      const statement = sqlite.prepare(query);
+      if (/^SELECT/i.test(query)) return { toArray: () => statement.all(...bindings) };
+      statement.run(...bindings); return { toArray: () => [] };
+    } },
+    transactionSync<T>(callback: () => T): T {
+      sqlite.exec('BEGIN');
+      try { const value = callback(); sqlite.exec('COMMIT'); return value; }
+      catch (error) { sqlite.exec('ROLLBACK'); throw error; }
+    },
+    async getAlarm() { return alarm; },
+    async setAlarm(value: number) { alarm = value; alarmCalls.push(value); },
+  };
+  const object = new LotteryDatabase({ storage } as unknown as DurableObjectState);
+  const call = async (operation: string, args = {}) => {
+    const response = await object.fetch(new Request('https://internal', { method: 'POST', body: JSON.stringify({ operation, args }) }));
+    return { status: response.status, ...await response.json() as any };
+  };
+  return { sqlite, object, call, alarmCalls };
 }
-async function migrate(db: PGlite) {
-  await db.exec(await readFile(new URL('202610020001_project_rows.sql', directory), 'utf8'));
-}
-async function snapshot(db: PGlite): Promise<any> {
-  return (await db.query<{ state: any }>('select public.ntcust_load_lottery_state() as state')).rows[0].state;
-}
-async function save(db: PGlite, projects: unknown[], domains: unknown[], version: number): Promise<any> {
-  return (await db.query<{ state: any }>('select public.ntcust_save_lottery_state($1::jsonb, $2::jsonb, $3) as state',
-    [JSON.stringify(projects), JSON.stringify(domains), version])).rows[0].state;
-}
+const project = (id: string) => ({ id, leader_id: `student-${id}`, seq_no: id, education_system: '四技', department: '資管', class_name: '甲', advisor: '王教授', field: '企業智慧化', original_code: '', project_title: `專題 ${id}`, assigned_group: 1, draw_order: 1, draw_code: 'A01', evaluators: ['李教授'], password_hash: `scrypt-v1$${'a'.repeat(32)}$${'b'.repeat(64)}` });
 
-test('PostgreSQL migrates the roster and atomically persists indexed project rows', async () => {
-  const db = await database();
+test('SQLite preserves credentials/results, enforces versions and rolls back failed transactions', async () => {
+  const { sqlite, call } = database();
   try {
-    const projects = [project('01', '\t Student-A \u3000'), project('02', 'student-b')];
-    await db.query('update public.ntcust_lottery_state set projects = $1::jsonb, version = 7', [JSON.stringify(projects)]);
-    await migrate(db);
-    const initial = await snapshot(db);
-    assert.equal(initial.version, 7);
-    assert.deepEqual(initial.projects, projects); // Includes hashes, reviewers and draw results.
-    const rows = await db.query<{ id: string; leader_key: string }>('select id, leader_key from public.ntcust_projects order by position');
-    assert.deepEqual(rows.rows, [{ id: '01', leader_key: 'student-a' }, { id: '02', leader_key: 'student-b' }]);
-    const indexes = await db.query<{ indexdef: string }>("select indexdef from pg_indexes where tablename = 'ntcust_projects'");
-    assert.ok(indexes.rows.some(row => row.indexdef.includes('UNIQUE INDEX') && row.indexdef.includes('(id)')));
-    assert.ok(indexes.rows.some(row => row.indexdef.includes('UNIQUE INDEX') && row.indexdef.includes('(leader_key)')));
-    // ID remains text: Excel imports are not restricted to UUID identifiers.
-    assert.deepEqual((await db.query<{ document: unknown }>('select document from public.ntcust_projects where id = $1', ['01'])).rows[0].document, projects[0]);
-    const configs = [...initial.domain_configs].reverse();
-    const swapped = [{ ...projects[1], leader_id: projects[0].leader_id }, { ...projects[0], leader_id: projects[1].leader_id }];
-    const saved = await save(db, swapped, configs, 7);
-    assert.equal(saved.version, 8);
-    assert.deepEqual((await snapshot(db)).projects, swapped);
-    assert.deepEqual((await snapshot(db)).domain_configs, configs);
-    await assert.rejects(save(db, projects, [], 7), (error: any) => error.code === '40001');
-    assert.deepEqual(await snapshot(db), saved);
-    // A failing row must roll back both the roster and settings/version.
-    await assert.rejects(save(db, [project('03'), { ...project('04'), password: 'plaintext' }], [], 8));
-    assert.deepEqual(await snapshot(db), saved);
-    await assert.rejects(save(db, [project('03', ' SAME '), project('04', 'same')], [], 8));
-    assert.deepEqual(await snapshot(db), saved);
-    await assert.rejects(save(db, [project('03'), project('03', 'other')], [], 8));
-    assert.deepEqual(await snapshot(db), saved);
-    await assert.rejects(save(db, [{ ...project('03'), shared_password_mode: true }, project('04')], [], 8));
-    assert.deepEqual(await snapshot(db), saved);
-    // Config-only saves do not rewrite unchanged project rows.
-    const beforeXmin = (await db.query('select id, xmin::text as revision from public.ntcust_projects order by id')).rows;
-    await save(db, swapped, configs, 8);
-    assert.deepEqual((await db.query('select id, xmin::text as revision from public.ntcust_projects order by id')).rows, beforeXmin);
-    await save(db, [swapped[0]], configs, 9);
-    assert.equal((await snapshot(db)).projects.length, 1);
-    await save(db, [], configs, 10);
-    assert.deepEqual((await snapshot(db)).projects, []);
-    // Only the backend may read rows or invoke the roster RPCs. Even its role
-    // cannot bypass the transactional write path with an ordinary REST update.
-    for (const role of ['anon', 'authenticated']) {
-      await db.exec(`set role ${role}`);
-      await assert.rejects(db.query('select * from public.ntcust_projects'));
-      await assert.rejects(db.query('select public.ntcust_load_lottery_state()'));
-      await assert.rejects(save(db, [], [], 11));
-      await db.exec('reset role');
-    }
-    await db.exec('set role service_role');
-    assert.deepEqual((await snapshot(db)).projects, []);
-    await assert.rejects(db.query('delete from public.ntcust_projects'));
-    await assert.rejects(db.query('update public.ntcust_lottery_state set version = 0'));
-    assert.equal((await save(db, projects, configs, 11)).version, 12);
-    await db.exec('reset role');
-    const largeRoster = Array.from({ length: 2000 }, (_, n) => project(`large-${n}`));
-    await save(db, largeRoster, configs, 12);
-    await db.exec('analyze public.ntcust_projects');
-    for (const key of ['id', 'leader_key']) {
-      const plan = await db.query<Record<string, string>>(`explain select document from public.ntcust_projects where ${key} = $1`, ['large-1000']);
-      assert.match(plan.rows.map(row => row['QUERY PLAN']).join('\n'), /Index Scan/);
-    }
-    const competingWrites = await Promise.allSettled([
-      save(db, largeRoster.slice(0, 1), configs, 13),
-      save(db, largeRoster.slice(1, 2), configs, 13),
-    ]);
-    assert.equal(competingWrites.filter(result => result.status === 'fulfilled').length, 1);
-    const rejected = competingWrites.find(result => result.status === 'rejected') as PromiseRejectedResult;
-    assert.equal(rejected.reason.code, '40001');
-    assert.equal((await snapshot(db)).version, 14);
-
-  } finally { await db.close(); }
+    const state = { projects: [project('1'), project('2')], domainConfigs: [], version: 7, lastUpdated: '2026-10-02T00:00:00.000Z' };
+    assert.equal((await call('save', { state, expectedVersion: 0 })).status, 200);
+    const loaded = (await call('load')).data;
+    assert.equal(loaded.projects[0].password_hash, state.projects[0].password_hash); assert.equal(loaded.version, 1);
+    const swapped = loaded.projects.map((p: any, i: number) => ({ ...p, leader_id: loaded.projects[1 - i].leader_id }));
+    assert.equal((await call('save', { state: { ...loaded, projects: swapped }, expectedVersion: 1 })).status, 200);
+    const saved = (await call('load')).data;
+    assert.equal((await call('save', { state: loaded, expectedVersion: 1 })).status, 409);
+    assert.equal((await call('save', { state: { ...saved, projects: [project('same'), project('same')] }, expectedVersion: 2 })).status, 400);
+    sqlite.exec("CREATE TRIGGER fail_insert BEFORE INSERT ON projects WHEN NEW.id = 'fail' BEGIN SELECT RAISE(ABORT, 'forced rollback'); END;");
+    assert.equal((await call('save', { state: { ...saved, projects: [project('new'), project('fail')] }, expectedVersion: 2 })).status, 503);
+    assert.deepEqual((await call('load')).data, saved);
+    const large = Array.from({ length: 2000 }, (_, i) => project(`large-${i}`));
+    assert.equal((await call('save', { state: { ...saved, projects: large }, expectedVersion: 2 })).status, 200);
+    const lookup = await call('findProject', { key: 'leader_key', value: 'student-large-1000' }); assert.equal(lookup.data.id, 'large-1000');
+    assert.equal((await call('publicResults')).data.length, 2000);
+    const latest = (await call('load')).data;
+    assert.equal((await call('save', { state: { ...latest, projects: [] }, expectedVersion: 3 })).status, 200);
+    assert.deepEqual((await call('load')).data.projects, []);
+  } finally { sqlite.close(); }
 });
 
-test('failed migration preserves the old roster and does not leave half-created tables', async () => {
-  const db = await database();
+test('SQLite joins only session owner, excludes revoked/expired sessions and cleans up expiry', async () => {
+  const { sqlite, call, object, alarmCalls } = database();
   try {
-    const projects = [project('01', 'same'), project('02', ' SAME ')];
-    await db.query('update public.ntcust_lottery_state set projects = $1::jsonb', [JSON.stringify(projects)]);
-    await assert.rejects(migrate(db));
-    await db.exec('rollback');
-    assert.deepEqual((await db.query<{ projects: any }>('select projects from public.ntcust_lottery_state')).rows[0].projects, projects);
-    assert.equal((await db.query<{ table: string | null }>("select to_regclass('public.ntcust_projects')::text as table")).rows[0].table, null);
-  } finally { await db.close(); }
-});
-
-test('student lookup joins only the token owner, excludes expired/revoked sessions and restricts RPC access', async () => {
-  const db = await database();
-  try {
-    const projects = [project('01'), project('02')];
-    await db.query('update public.ntcust_lottery_state set projects = $1::jsonb', [JSON.stringify(projects)]);
-    await migrate(db);
-    await db.exec(await readFile(new URL('202610020002_student_lookup.sql', directory), 'utf8'));
-    const token = 'a'.repeat(64); const expired = 'b'.repeat(64);
-    await db.query("insert into public.ntcust_student_sessions values ($1, '02', 'credential-version', now() + interval '1 hour'), ($2, '01', 'expired-version', now() - interval '1 second')", [token, expired]);
-    const lookup = async (key: string) => (await db.query<{ result: any }>('select public.ntcust_student_lookup($1) as result', [key])).rows[0].result;
-    for (const role of ['anon', 'authenticated']) {
-      await db.exec(`set role ${role}`);
-      await assert.rejects(lookup(token), (error: any) => error.code === '42501');
-      await db.exec('reset role');
-    }
-    await db.exec('set role service_role');
-    assert.deepEqual(await lookup(token), { project: projects[1], credential_version: 'credential-version' });
-    assert.equal(await lookup(expired), null);
-    assert.equal(await lookup('c'.repeat(64)), null);
-    await db.exec('reset role');
-    await db.query('delete from public.ntcust_student_sessions where token_hash = $1', [token]);
-    await db.exec('set role service_role');
-    assert.equal(await lookup(token), null);
-    await db.exec('reset role');
-  } finally { await db.close(); }
+    await call('save', { state: { projects: [project('1'), project('2')], domainConfigs: [] }, expectedVersion: 0 });
+    const session = { project_id: '2', credential_version: 'version', expires_at: new Date(Date.now() + 3600000).toISOString() };
+    await call('putSession', { scope: 'student', tokenHash: 'active', session });
+    await call('putSession', { scope: 'student', tokenHash: 'expired', session: { ...session, expires_at: '2000-01-01T00:00:00.000Z' } });
+    assert.equal(alarmCalls.length, 1); // New logins must not postpone expiry cleanup.
+    assert.equal((await call('studentLookup', { tokenHash: 'active' })).data.project.id, '2');
+    assert.equal((await call('studentLookup', { tokenHash: 'expired' })).data, null);
+    assert.equal((await call('getSession', { scope: 'staff', tokenHash: 'active' })).data, null);
+    await object.alarm(); assert.equal(sqlite.prepare('SELECT count(*) AS n FROM sessions').get()!.n, 1);
+    await call('deleteSession', { scope: 'student', tokenHash: 'active' }); assert.equal((await call('studentLookup', { tokenHash: 'active' })).data, null);
+  } finally { sqlite.close(); }
 });

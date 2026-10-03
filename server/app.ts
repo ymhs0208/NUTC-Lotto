@@ -1,14 +1,13 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
-import { createClient } from '@supabase/supabase-js';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createStore, ApiError, validateProjects, validateDomains, type DatabaseState } from './store';
-import { projectDto, stageProjectDto, studentProjectDto, publicStudentProjectDto, prepareProjects, verifyStudentPassword, invalidateSharedPasswordVerification, hashPassword, sharedPasswordHash } from './credentials';
+import { projectDto, stageProjectDto, studentProjectDto, publicStudentProjectDto, prepareProjects, verifyStudentPassword, verifyPassword, fingerprint, invalidateSharedPasswordVerification, hashPassword, sharedPasswordHash } from './credentials';
 import { createStudentSession, getStudentProject, clearStudentSession } from './studentSessions';
 import { createStaffSession, getStaffSession, clearStaffSession } from './staffSessions';
 import { loginLimiter, anonymousLimiter, sessionLimiter } from './rateLimit';
 import { readSessionToken, sessionScopeForPath } from './sessionSecurity';
 import { studentLoginWork, staffLoginWork } from './loginAdmission';
-import { ResourceBusyError, timedFetch } from './resourceLimits';
+import { ResourceBusyError } from './resourceLimits';
 import { runtimeEnv } from './runtime';
 import { publicError } from './errors';
 import { executeAllDomainsIndependentLottery } from '../src/lib/lottery';
@@ -50,6 +49,14 @@ app.use('/api', (req, res, next) => {
   // Clearing a missing/invalid cookie is safe and needs no database or limiter.
   if (path.endsWith('/logout') && !readSessionToken(req, scope)) return next();
   (scope === 'student' ? studentSessionLimit : staffSessionLimit)(req, res, next);
+});
+// Authenticate account setup before accepting its body.
+app.post('/api/cloudflare/setup', (req, _res, next) => {
+  const secret = runtimeEnv().SETUP_TOKEN;
+  const bearer = req.get('authorization')?.replace(/^Bearer /, '');
+  if (!secret || secret.length < 32) return next(new ApiError(404, '找不到此端點。'));
+  if (!bearer || !timingSafeEqual(Buffer.from(fingerprint(secret), 'hex'), Buffer.from(fingerprint(bearer), 'hex'))) return next(new ApiError(401, '帳號設定憑證不正確。'));
+  next();
 });
 // Authenticate roster writes before accepting their larger body allowance.
 app.post('/api/projects', (req, _res, next) => { void authorize(req, true).then(() => next()).catch(next); });
@@ -103,20 +110,20 @@ app.get('/api/health', anonymousLimiter('health', 120, 3600), route(async (_req,
   await createStore().health();
   res.json({ status: 'ok' });
 }));
+app.post('/api/cloudflare/setup', route(async (req, res) => {
+  const store = createStore();
+  if (req.body.action === 'accounts') {
+    res.json({ success: true, ...await store.putAccounts(req.body.accounts) });
+  } else throw new ApiError(400, '無效帳號設定操作。');
+}));
 app.post('/api/auth/verify', loginLimiter('staff'), loginRoute('staff', async (req, res) => {
   const { username, password, targetView } = req.body;
   if (typeof username !== 'string' || username.length > 256 || typeof password !== 'string' || password.length > 128 || !['admin', 'stage'].includes(targetView)) throw new ApiError(400, '請輸入 Email、密碼與有效的登入頁面。');
-  // Separate auth client: signing in must never replace the database client's privileged token.
-  const url = runtimeEnv().SUPABASE_URL;
-  const key = runtimeEnv().SUPABASE_PUBLISHABLE_KEY || runtimeEnv().SUPABASE_ANON_KEY;
-  if (!url || !key) throw new ApiError(503, '尚未設定 Supabase Auth 連線資訊。');
-  const auth = createClient(url, key, { global: { fetch: timedFetch }, auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } = await auth.auth.signInWithPassword({ email: username.trim(), password });
-  if (error || !data.session) throw new ApiError(401, 'Email 或密碼不正確。');
-  const role = data.user.app_metadata.role;
-  if (!['admin', 'stage'].includes(role) || (targetView === 'admin' && role !== 'admin')) throw new ApiError(403, '此帳號尚未獲得操作權限。');
-  await createStaffSession(req, res, data.session.access_token, data.user.id, data.session.expires_at!, req.body.remember === true);
-  res.json({ success: true, session: { role, username: data.user.email || '', displayName: role === 'admin' ? '大會系統管理員' : '抽籤展演人員', loginTime: new Date().toISOString(), expiresAt: data.session.expires_at } });
+  const account = await createStore().findAccount('email', username.trim().toLowerCase());
+  if (!await verifyPassword(password, account?.password_hash) || !account) throw new ApiError(401, 'Email 或密碼不正確。');
+  if (targetView === 'admin' && account.role !== 'admin') throw new ApiError(403, '此帳號尚未獲得操作權限。');
+  const session = await createStaffSession(req, res, account, req.body.remember === true);
+  res.json({ success: true, session });
 }));
 app.get('/api/auth/me', route(async (req, res) => {
   res.json({ success: true, session: (await getStaffSession(req))!.profile });
@@ -130,7 +137,7 @@ app.post('/api/student/verify', loginLimiter('student', 10, 1200), loginRoute('s
   if (typeof leaderId !== 'string' || leaderId.length > 128 || typeof password !== 'string' || password.length > 128) throw new ApiError(400, '請輸入有效的組長學號與密碼。');
   const store = createStore();
   let project = await store.findProject('leader_key', leaderId.trim().toLowerCase());
-  const valid = await verifyStudentPassword(password, project);
+  const valid = await verifyStudentPassword(password, project ?? undefined);
   if (!valid || !project) throw new ApiError(401, '學號或密碼不正確，尚未設定密碼者請洽大會管理員。');
   if (project.shared_password_mode === true) {
     // Other shards may rotate/disable credentials while this request waits.

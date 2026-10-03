@@ -6,6 +6,7 @@ import { frontendCacheControl } from '../server/frontendAssets';
 import { withRuntime, type RuntimeEnvironment } from '../server/runtime';
 
 interface Env extends RuntimeEnvironment { ASSETS: Fetcher; LOGIN_LIMITER: DurableObjectNamespace; API_BACKEND: DurableObjectNamespace; }
+export { LotteryDatabase } from '../server/cloudflareDatabase';
 createServer(app).listen(8080);
 export default {
   async fetch(request: Request, env: Env) {
@@ -26,7 +27,7 @@ export default {
       }
     } else {
       // Keep users behind one campus NAT from queuing on a single API object.
-      // These objects are stateless; the shared login counter lives in LOGIN_LIMITER.
+      // State lives in LOTTERY_DATABASE; counters live in LOGIN_LIMITER.
       const shard = crypto.getRandomValues(new Uint8Array(1))[0];
       response = await env.API_BACKEND.get(env.API_BACKEND.idFromName(`api-${shard}`)).fetch(request.url, { ...forward, body: request.body });
     }
@@ -42,7 +43,7 @@ export default {
   },
 };
 
-// Give password hashing the DO CPU budget; all business data still stays in Supabase.
+// Give password hashing the DO CPU budget while keeping the SQLite object responsive.
 export class ApiBackend {
   constructor(_ctx: DurableObjectState, private env: Env) {}
   async fetch(request: Request) {

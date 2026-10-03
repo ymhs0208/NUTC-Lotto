@@ -49,8 +49,3 @@ export class ShortCache<T> {
   }
   invalidate(key: string): void { this.entries.delete(key); }
 }
-
-// Supabase calls must not occupy admission/cache slots indefinitely.
-export const timedFetch: typeof fetch = (input, init) => fetch(input, {
-  ...init, signal: init?.signal || AbortSignal.timeout(5000),
-});

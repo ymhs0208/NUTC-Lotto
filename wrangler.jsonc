@@ -14,8 +14,8 @@
     "run_worker_first": true
   },
   "durable_objects": {
-    "bindings": [{ "name": "LOGIN_LIMITER", "class_name": "LoginLimiter" }, { "name": "API_BACKEND", "class_name": "ApiBackend" }]
+    "bindings": [{ "name": "LOGIN_LIMITER", "class_name": "LoginLimiter" }, { "name": "API_BACKEND", "class_name": "ApiBackend" }, { "name": "LOTTERY_DATABASE", "class_name": "LotteryDatabase" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LoginLimiter", "ApiBackend"] }],
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LoginLimiter", "ApiBackend"] }, { "tag": "v2", "new_sqlite_classes": ["LotteryDatabase"] }],
   "observability": { "enabled": true }
 }

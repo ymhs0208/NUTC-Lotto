@@ -10,8 +10,8 @@ export const sessionWork = new BoundedExecutor(16, 512, 5000);
 
 function signature(token: string, scope: SessionScope): Buffer {
   const env = runtimeEnv();
-  const secret = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!secret) throw new ApiError(503, '登入服務暫時無法使用。');
+  const secret = env.SESSION_SECRET;
+  if (!secret || secret.length < 32) throw new ApiError(503, '登入服務暫時無法使用。');
   // Stable across restarts/shards; domain separation prevents staff/student reuse.
   // Rotating the backend secret also invalidates all signed session cookies.
   const key = createHmac('sha256', secret).update('ntcust:session-signing:v1').digest();

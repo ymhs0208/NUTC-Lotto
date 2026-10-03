@@ -5,7 +5,7 @@ import { readSessionToken, signSessionToken, sessionWork } from '../server/sessi
 import { sessionLimiter } from '../server/rateLimit';
 import { withRuntime } from '../server/runtime';
 
-const env = { SUPABASE_SECRET_KEY: 'local-session-test-secret' };
+const env = { SESSION_SECRET: 'local-session-test-secret-at-least-32' };
 const token = 'a'.repeat(64);
 const reqFor = (scope: 'student' | 'staff', value: string, ip = '203.0.113.1') => ({
   headers: { cookie: `ntcust_${scope}_session=${value}` }, ip,
@@ -22,7 +22,7 @@ test('session signatures bind token, scope and server key; legacy/malformed cook
     for (const invalid of [token, '', 'x'.repeat(10000), `${token}.${'0'.repeat(64)}`]) {
       assert.equal(readSessionToken(reqFor('student', invalid), 'student'), null);
     }
-    withRuntime({ SUPABASE_SECRET_KEY: 'rotated-session-test-secret' }, () => {
+    withRuntime({ SESSION_SECRET: 'rotated-session-test-secret-at-least-32' }, () => {
       assert.equal(readSessionToken(reqFor('student', signed), 'student'), null);
     });
     withRuntime(env, () => assert.equal(signSessionToken(token, 'student'), signed));

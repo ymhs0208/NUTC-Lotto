@@ -2,11 +2,9 @@ import type { DurableObjectNamespace } from '@cloudflare/workers-types/index.ts'
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 export interface RuntimeEnvironment {
-  SUPABASE_URL?: string;
-  SUPABASE_SECRET_KEY?: string;
-  SUPABASE_SERVICE_ROLE_KEY?: string;
-  SUPABASE_PUBLISHABLE_KEY?: string;
-  SUPABASE_ANON_KEY?: string;
+  SESSION_SECRET?: string;
+  SETUP_TOKEN?: string;
+  LOTTERY_DATABASE?: DurableObjectNamespace;
   NODE_ENV?: string;
   LOGIN_LIMITER?: DurableObjectNamespace;
 }
