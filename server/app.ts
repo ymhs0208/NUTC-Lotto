@@ -182,11 +182,16 @@ app.post('/api/projects', route(async (req, res) => {
   const store = createStore();
   const state = await store.load();
   checkVersion(req, state);
-  state.projects = await prepareProjects(req.body.projects, state.projects);
-  // Imported fields become available on the stage immediately.
-  for (const p of state.projects) {
-    if (!state.domainConfigs.some(c => c.field === p.field)) state.domainConfigs.push({ id: `domain-${crypto.randomUUID()}`, field: p.field, groupCount: 2, evaluatorsPerGroup: {} });
+  // Validate the merged configuration before hashing passwords or saving the roster.
+  const knownFields = new Set(state.domainConfigs.map(c => c.field));
+  for (const p of req.body.projects) {
+    if (!knownFields.has(p.field)) {
+      state.domainConfigs.push({ id: `domain-${crypto.randomUUID()}`, field: p.field, groupCount: 2, evaluatorsPerGroup: {} });
+      knownFields.add(p.field);
+    }
   }
+  validateDomains(state.domainConfigs);
+  state.projects = await prepareProjects(req.body.projects, state.projects);
   res.json(staffState(await store.save(state, state.version), 'admin'));
 }));
 app.post('/api/student/shared-password', route(async (req, res) => {

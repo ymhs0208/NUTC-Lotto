@@ -14,6 +14,48 @@ test('roster and evaluator validation rejects malformed data', () => {
   for (const evaluatorsPerGroup of ['invalid', [], { 1: 'invalid' }, { 1: [123] }]) assert.throws(() => validateDomains([{ ...domains[0], evaluatorsPerGroup }]));
 });
 
+test('roster imports enforce the merged domain limit atomically and remain editable at 100 domains', { timeout: 180000 }, async () => {
+  const worker = await localWorker();
+  try {
+    await worker.start();
+    await worker.setup({ action: 'accounts', accounts: [{
+      id: 'limit-admin', email: 'limit@example.edu.tw', role: 'admin', password_hash: await hashPassword('Abc12345'),
+    }] });
+    const login = await worker.request('/api/auth/verify', { username: 'limit@example.edu.tw', password: 'Abc12345', targetView: 'admin' });
+    assert.equal(login.status, 200);
+    const req = (path: string, body?: unknown) => worker.request(path, body, login.cookie);
+    const configs = Array.from({ length: 99 }, (_, i) => ({ id: `d${i}`, field: `領域${i}`, groupCount: 2 }));
+    assert.equal((await req('/api/domain-configs', { version: 0, domainConfigs: configs })).status, 200);
+    const stored = { ...project, field: '領域0', password: 'Xyz12345' };
+    assert.equal((await req('/api/projects', { version: 1, projects: [stored] })).status, 200);
+    const before = (await req('/api/state')).data;
+    const imported = (i: number, field: string) => ({ ...project, id: `new${i}`, leader_id: `student${i}`, field });
+    const overflow = await req('/api/projects', {
+      version: before.version, projects: [imported(1, '領域99'), imported(2, '領域100')],
+    });
+    assert.equal(overflow.status, 400);
+    assert.match(overflow.data.error, /領域設定最多 100 筆/);
+    assert.deepEqual((await req('/api/state')).data, before);
+    assert.equal((await worker.request('/api/student/verify', { leaderId: stored.leader_id, password: stored.password })).status, 200);
+    const atLimit = await req('/api/projects', {
+      version: before.version, projects: [before.projects[0], imported(1, '領域99'), imported(2, '領域99')],
+    });
+    assert.equal(atLimit.status, 200);
+    assert.equal(atLimit.data.domainConfigs.length, 100);
+    assert.equal(atLimit.data.domainConfigs.filter((c: any) => c.field === '領域99').length, 1);
+    assert.deepEqual(atLimit.data.domainConfigs.slice(0, 99), configs);
+    const edited = await req('/api/domain-configs', {
+      version: atLimit.data.version, domainConfigs: atLimit.data.domainConfigs.map((c: any) => c.id === 'd0' ? { ...c, drawPrefix: 'Z' } : c),
+    });
+    assert.equal(edited.status, 200);
+    const beyondLimit = await req('/api/projects', {
+      version: edited.data.version, projects: [...edited.data.projects, imported(3, '領域100')],
+    });
+    assert.equal(beyondLimit.status, 400);
+    assert.deepEqual((await req('/api/state')).data, edited.data);
+  } finally { await worker.dispose(); }
+});
+
 test('Workers persists data, authenticates staff/students and atomically enforces versions', { timeout: 180000 }, async () => {
   const worker = await localWorker();
   try {
