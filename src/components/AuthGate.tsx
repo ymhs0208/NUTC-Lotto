@@ -34,11 +34,22 @@ export const AuthGate: React.FC<AuthGateProps> = ({
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+    const email = username.trim();
+    if (!email) {
+      setErrorMessage('請輸入登入 Email。');
+      e.currentTarget.querySelector<HTMLInputElement>('#staff-email')?.focus();
+      return;
+    }
+    if (!password.trim()) {
+      setErrorMessage('請輸入通行密碼。');
+      e.currentTarget.querySelector<HTMLInputElement>('#staff-password')?.focus();
+      return;
+    }
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
       const data = await request<{ session: AuthSession }>('/api/auth/verify', {
-        username: username.trim(), password, targetView, remember: rememberMe,
+        username: email, password, targetView, remember: rememberMe,
       });
       const session = data.session;
       saveAuthSession(session);
@@ -90,6 +101,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({
               <input
                 id="staff-email"
                 type="email"
+                required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="例如：admin@example.edu.tw"
@@ -111,6 +123,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({
               <input
                 id="staff-password"
                 type={showPassword ? 'text' : 'password'}
+                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="請輸入授權通行密碼"
