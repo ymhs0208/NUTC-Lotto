@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AuthSession } from '../lib/auth';
-import { UserRound, LogOut, LoaderCircle } from 'lucide-react';
+import { UserRound, ShieldCheck, ChevronDown, Mail, LogOut, LoaderCircle } from 'lucide-react';
 
 interface NavbarProps {
   authSession?: AuthSession | null;
@@ -9,6 +9,24 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ authSession, onLogout }) => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) menuRef.current.open = false;
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && menuRef.current?.open) {
+        menuRef.current.open = false;
+        menuRef.current.querySelector('summary')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
   const handleLogout = async () => {
     if (!onLogout || isLoggingOut) return;
     setIsLoggingOut(true);
@@ -47,28 +65,49 @@ export const Navbar: React.FC<NavbarProps> = ({ authSession, onLogout }) => {
         </a>
 
         {authSession && onLogout && (
-          <details className="group relative shrink-0">
+          <details ref={menuRef} className="group relative shrink-0">
             <summary
               aria-label={`目前登入：${roleLabel}，開啟帳號選單`}
-              className={`flex h-11 w-11 list-none items-center justify-center rounded-full border-2 shadow-sm transition-all hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 cursor-pointer [&::-webkit-details-marker]:hidden ${isAdmin ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100 group-open:border-emerald-400' : 'border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 hover:bg-rose-100 group-open:border-rose-400'}`}
+              title="帳號選單"
+              className="flex h-11 list-none items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-2 text-slate-700 transition-colors hover:bg-slate-50 group-open:border-slate-300 group-open:bg-slate-50 sm:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 cursor-pointer [&::-webkit-details-marker]:hidden"
             >
-              <UserRound className="h-5 w-5" strokeWidth={2.25} aria-hidden="true" />
+              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${isAdmin ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                <UserRound className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="hidden text-sm font-semibold sm:block">{isAdmin ? '系統管理員' : '抽籤人員'}</span>
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" />
             </summary>
-            <div className="absolute right-0 top-full z-50 mt-3 w-[min(19rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10">
-              <div className="px-3 py-3">
-                <p className="text-xs font-semibold text-slate-500">目前登入</p>
-                <p className="mt-1 text-sm font-black text-slate-900">{roleLabel}</p>
-                <p className="mt-1 break-all text-xs text-slate-600">{authSession.username}</p>
+            <div className="absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.12)]">
+              <div className="p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-medium text-slate-500">目前登入</p>
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                    已登入
+                  </span>
+                </div>
+                <div className="mt-4 flex items-start gap-3">
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${isAdmin ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                    {isAdmin ? <ShieldCheck className="h-5 w-5" aria-hidden="true" /> : <UserRound className="h-5 w-5" aria-hidden="true" />}
+                  </span>
+                  <div className="min-w-0 pt-0.5">
+                    <p className="text-sm font-semibold leading-5 text-slate-900">{roleLabel}</p>
+                    <p className="mt-1 flex items-start gap-1.5 text-xs leading-5 text-slate-500">
+                      <Mail className="mt-1 h-3 w-3 shrink-0" aria-hidden="true" />
+                      <span className="min-w-0 break-all">{authSession.username}</span>
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="border-t border-slate-100 pt-2">
+              <div className="border-t border-slate-100 bg-slate-50/70 p-2">
                 <button
                   onClick={() => void handleLogout()}
                   disabled={isLoggingOut}
                   type="button"
-                  className="flex min-h-11 w-full items-center gap-2.5 rounded-xl px-3 text-left text-sm font-bold text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-50 cursor-pointer"
+                  className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md px-3 text-left text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-50 cursor-pointer"
                 >
+                  <span>{isLoggingOut ? '登出中…' : isAdmin ? '登出後台' : '登出'}</span>
                   {isLoggingOut ? <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <LogOut className="h-4 w-4" aria-hidden="true" />}
-                  {isLoggingOut ? '登出中…' : isAdmin ? '登出後台' : '登出'}
                 </button>
               </div>
             </div>
