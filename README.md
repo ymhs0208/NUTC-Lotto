@@ -48,6 +48,8 @@ npm run deploy
 
 `wrangler.jsonc` 保留既有 Worker 名稱 `special-exhibition-lottery`，自訂網域設為 `lottery.nutc.cc.cd`。部署使用新增的 `v2` migration 建立 `LotteryDatabase`，並保留既有 `v1` 的 API 與限流物件。資料庫 schema 在物件首次啟動時自動建立，不需要手動執行 SQL 或填 D1 ID。
 
+Wrangler 的 `build.command` 已設定為 `npm run build`，直接執行 `npx wrangler deploy` 也會先產生 `dist`。Cloudflare Workers Builds 可連接 `ymhs0208/NUTC-Lotto` 的 `main` 分支，Root directory 設為儲存庫根目錄，Build command 留空，Deploy command 使用 `npx wrangler deploy`；前端編譯由 Wrangler 統一處理。
+
 部署後以正式 `TARGET_URL=https://lottery.nutc.cc.cd` 與正式 `SETUP_TOKEN` 執行帳號設定，再關閉設定端點：
 
 ```sh

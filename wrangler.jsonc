@@ -6,6 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "keep_vars": true,
+  "build": { "command": "npm run build" },
   "routes": [{ "pattern": "lottery.nutc.cc.cd", "custom_domain": true }],
   "assets": {
     "directory": "./dist",
