@@ -364,9 +364,6 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
             <div className="w-full animate-in fade-in zoom-in duration-300 text-left">
               <div className="flex flex-col gap-5 rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-emerald-50 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between lg:p-8">
                 <div className="flex items-start gap-4 sm:gap-5">
-                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-200 sm:h-16 sm:w-16" aria-hidden="true">
-                    <CheckCircle2 className="h-8 w-8 sm:h-9 sm:w-9" />
-                  </span>
                   <div>
                     <p className="text-sm font-bold text-emerald-800 sm:text-base">
                       {selectedField === 'ALL' ? '全校各領域抽籤完成' : `「${selectedField}」領域抽籤完成`}
