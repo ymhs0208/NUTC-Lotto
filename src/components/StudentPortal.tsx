@@ -265,21 +265,17 @@ export const StudentPortal: React.FC = () => {
                   </div>}
                 </div>
 
-                <section className="min-w-0 border-y border-blue-200 bg-blue-50 px-4 py-5 sm:px-6 sm:py-6" aria-label="抽籤結果">
-                  <h3 className="flex items-center gap-2 text-sm font-bold text-blue-800"><Award className="h-5 w-5 shrink-0" />抽籤後編號</h3>
-                  {myProject.draw_code?.trim() ? <p className={`mt-4 text-center font-black leading-tight tabular-nums text-blue-950 [overflow-wrap:anywhere] ${resultNumberSize(myProject.draw_code)}`}>{myProject.draw_code}</p>
-                    : <p className="mt-4 text-center text-lg font-bold text-blue-950">編號尚未設定</p>}
-                </section>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-                      <Layers className="w-4 h-4" />
-                      領域名稱
-                    </div>
-                    <div className="mt-1 text-lg sm:text-xl font-bold text-slate-900 break-words">{myProject.field}</div>
+                <section className="grid min-w-0 grid-cols-1 border-y border-blue-200 bg-blue-50 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]" aria-label="抽籤結果">
+                  <div className="min-w-0 px-4 py-5 sm:px-6 sm:py-6">
+                    <h3 className="flex items-center gap-2 text-sm font-bold text-blue-800"><Award className="h-5 w-5 shrink-0" />抽籤後編號</h3>
+                    {myProject.draw_code?.trim() ? <p className={`mt-4 font-black leading-tight tabular-nums text-blue-950 [overflow-wrap:anywhere] ${resultNumberSize(myProject.draw_code)}`}>{myProject.draw_code}</p>
+                      : <p className="mt-4 text-lg font-bold text-blue-950">編號尚未設定</p>}
                   </div>
-                </div>
+                  <div className="flex min-w-0 flex-col justify-center gap-3 border-t border-blue-200 bg-slate-50 px-4 py-5 sm:border-l sm:border-t-0 sm:px-6 sm:py-6">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-600"><Layers className="h-4 w-4 shrink-0" />領域名稱</h3>
+                    <p className="text-lg font-bold leading-relaxed text-slate-900 [overflow-wrap:anywhere] sm:text-xl">{myProject.field}</p>
+                  </div>
+                </section>
                 {!sharedPasswordMode && !!myProject.evaluators?.length && <p className="text-sm text-slate-600 px-1">
                   評審委員：{myProject.evaluators.join('、')}
                 </p>}
