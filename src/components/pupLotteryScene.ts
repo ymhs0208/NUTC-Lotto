@@ -161,14 +161,28 @@ export function createPupLotteryScene(canvas: HTMLCanvasElement) {
       ctx.lineCap = "round";
       ctx.stroke();
     };
-    const embarrassed = pose === "shy" || pose === "cover";
+    const embarrassed = pose === "shy";
     ctx.save();
     ctx.globalAlpha = embarrassed ? 0.65 : 0.45;
     ellipse(-25, -24, embarrassed ? 9 : 7, 5, "#f4b7c5");
     ellipse(25, -24, embarrassed ? 9 : 7, 5, "#f4b7c5");
     ctx.restore();
 
-    if (pose === "sleep" || pose === "cover") {
+    if (pose === "cover") {
+      // Wide eyes and raised brows make the jumping panic clear at stage scale.
+      for (const eyeX of [-16, 16]) {
+        ellipse(eyeX, -40, 7.5, 9, c.white);
+        ctx.beginPath();
+        ctx.ellipse(eyeX, -40, 7.5, 9, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = c.navy;
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+        ellipse(eyeX, -42, 3.5, 4.5, c.navy);
+        dot(eyeX - 1, -44, 1.2, c.white);
+      }
+      curve(-25, -54, -17, -62, -9, -57, 2.3);
+      curve(9, -57, 17, -62, 25, -54, 2.3);
+    } else if (pose === "sleep") {
       curve(-23, -39, -16, -33, -9, -39, 2.5);
       curve(9, -39, 16, -33, 23, -39, 2.5);
     } else {
@@ -190,13 +204,15 @@ export function createPupLotteryScene(canvas: HTMLCanvasElement) {
       }
     }
     ellipse(0, -27, 4, 3, c.navy);
-    if (pose === "panic") {
+    if (pose === "cover") {
+      ellipse(0, -15, 6, 7, c.navy);
+    } else if (pose === "panic") {
       ellipse(0, -16, 3.5, 4.5, c.navy);
     } else if (pose === "sleep") {
       curve(-3, -17, 0, -15, 3, -17, 1.5);
     } else {
       curve(0, -24, 0, -21, 0, -20, 1.6);
-      const smileWidth = pose === "shy" ? 5 : pose === "cover" ? 6 : 8;
+      const smileWidth = pose === "shy" ? 5 : 8;
       curve(-smileWidth, -19, 0, -12, smileWidth, -19, 1.8);
     }
     ctx.restore();
@@ -276,76 +292,51 @@ export function createPupLotteryScene(canvas: HTMLCanvasElement) {
     }
     ctx.restore();
   }
-  function sleepyPhoto(t: number) {
+  function sillyPhoto() {
     rr(329, 50, 194, 110, 9, c.white);
-    rr(338, 58, 175, 81, 6, c.faint);
-    rr(343, 78, 9, 61, 4, c.navy);
-    rr(349, 99, 153, 35, 6, c.line);
-    rr(350, 103, 150, 23, 5, c.white);
-    rr(349, 129, 153, 7, 3, c.navy);
-    rr(354, 134, 7, 6, 2, c.navy);
-    rr(489, 134, 7, 6, 2, c.navy);
-    rr(355, 91, 62, 34, 12, c.white, c.line);
-    line(
-      [
-        [360, 119],
-        [403, 119],
-      ],
-      c.line,
-      1,
-    );
-    ellipse(407, 109, 13, 10, c.white);
+    rr(338, 58, 175, 81, 6, c.soft);
     ctx.save();
-    ctx.translate(385, 106);
-    ctx.rotate(-1.35);
-    ellipse(-22, -2, 8, 15, "#d5baa0", -0.28);
-    ellipse(22, -3, 8, 15, "#d5baa0", 0.22);
-    ellipse(0, -2, 24, 22, c.white);
     ctx.beginPath();
-    ctx.ellipse(0, -2, 24, 22, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = c.line;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ellipse(-14, -9, 7, 8, "#ead8c4", -0.1);
+    ctx.roundRect(338, 58, 175, 81, 6);
+    ctx.clip();
+    spark(363, 78, 5, c.white);
+    spark(490, 116, 6, c.white);
+    dot(483, 74, 3, c.white);
+    rr(390, 123, 72, 30, 16, c.blue);
+    ellipse(392, 94, 10, 23, "#d5baa0", -0.2);
+    ellipse(460, 94, 10, 23, "#d5baa0", 0.2);
+    rr(391, 64, 70, 67, 28, c.white, c.line);
+    ellipse(407, 86, 9, 11, "#ead8c4", -0.1);
+    ellipse(402, 110, 7, 4, "#f4b7c5");
+    ellipse(450, 110, 7, 4, "#f4b7c5");
+    // One bright eye and one curved wink, with a small tongue-out smile.
+    ellipse(412, 96, 4.5, 6, c.navy);
+    dot(410.5, 94, 1.5, c.white);
     ctx.beginPath();
-    ctx.arc(-11, -4, 5, 0.15, Math.PI - 0.15);
+    ctx.moveTo(433, 97);
+    ctx.quadraticCurveTo(440, 89, 447, 97);
     ctx.strokeStyle = c.navy;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
     ctx.stroke();
+    ellipse(426, 106, 4, 3, c.navy);
     ctx.beginPath();
-    ctx.arc(11, -4, 5, 0.15, Math.PI - 0.15);
-    ctx.stroke();
-    ellipse(0, 5, 3.5, 2.5, c.navy);
+    ctx.moveTo(416, 113);
+    ctx.quadraticCurveTo(426, 125, 438, 112);
+    ctx.quadraticCurveTo(426, 117, 416, 113);
+    ctx.fillStyle = c.navy;
+    ctx.fill();
+    rr(426, 115, 8, 11, 4, "#f0a8bd");
     line(
       [
-        [-3, 11],
-        [0, 12],
-        [3, 11],
+        [430, 116],
+        [430, 121],
       ],
-      c.navy,
-      1.5,
-    );
-    ellipse(-18, 7, 5, 3, "#f6c5cf");
-    ellipse(18, 7, 5, 3, "#f6c5cf");
-    ctx.restore();
-    const breath = Math.sin(t * 2.2) * 0.6;
-    rr(408, 95 + breath, 87, 34 - breath, 9, c.blue);
-    rr(408, 95 + breath, 87, 7, 3, c.soft);
-    ellipse(409, 117, 7, 4, c.white);
-    line(
-      [
-        [407, 116],
-        [407, 118],
-      ],
-      c.line,
+      "#d681a0",
       1,
     );
-    spark(439, 113, 4, c.soft);
-    spark(470, 116, 4, c.soft);
-    dot(456, 106, 2, c.soft);
-    text("z", 426, 77, 11, c.navy);
-    text("Z", 439, 68, 14, c.navy);
-    text("小布的睡覺畫面 · z Z", 426, 153, 11, c.navy);
+    ctx.restore();
+    text("小布的鬼臉照片", 426, 153, 11, c.navy);
   }
   function projection(t: number) {
     rr(318, 33, 216, 133, 10, c.white, c.line);
@@ -371,7 +362,7 @@ export function createPupLotteryScene(canvas: HTMLCanvasElement) {
       text("現在公布結果！", 426, 119, 13, c.blue);
       text("全組別一起揭曉", 426, 152, 11, c.navy);
     } else if (t < 6.35) {
-      sleepyPhoto(t);
+      sillyPhoto();
     } else {
       const p = ease((t - 6.35) / 0.5);
       ctx.save();

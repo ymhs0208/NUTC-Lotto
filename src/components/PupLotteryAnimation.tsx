@@ -3,12 +3,20 @@ import { BookOpen } from "lucide-react";
 import { createPupLotteryScene } from "./pupLotteryScene";
 import "./PupLotteryAnimation.css";
 
+// Reveal at the second remote press, before the preview/zoom sequence.
+const REVEAL_SCENE_TIME = 5.81;
 export const pupLotteryDuration = () =>
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 9000;
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? 900
+    : (9000 * REVEAL_SCENE_TIME) / 8.6;
 
 const chapters = [
   ["公布結果", "現在公布抽籤結果！", "小布：大家的場次和報告順序都在這裡！"],
-  ["抽籤小烏龍", "咦？！怎麼是我在睡覺！", "小布：按錯了！這是我的睡覺畫面！"],
+  [
+    "抽籤小烏龍",
+    "咦？！怎麼是我的鬼臉照片！",
+    "小布：按錯了！這是我的鬼臉照片！",
+  ],
   ["害羞一拍", "這張不是抽籤結果啦……", "小布：可以當作沒看到嗎？"],
   ["慌張遮照片", "等一下！先別看啦！", "小布：我擋！我馬上換回來！"],
   ["切回抽籤結果", "找到了！這張才對！", "小布：這次真的是抽籤結果。"],
@@ -16,7 +24,13 @@ const chapters = [
   ["準備公布", "正在確認抽籤結果…", "小布：請稍候，馬上公布大家的場次與順位！"],
 ];
 
-export function PupLotteryAnimation({ duration }: { duration: number }) {
+export function PupLotteryAnimation({
+  duration,
+  onReveal,
+}: {
+  duration: number;
+  onReveal: () => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [phase, setPhase] = useState(0);
   const [eggFound, setEggFound] = useState(false);
@@ -32,7 +46,7 @@ export function PupLotteryAnimation({ duration }: { duration: number }) {
     let lastPhase = -1;
     const tick = (now: number) => {
       const progress = Math.min(1, (now - started) / duration);
-      time = reduced ? 0 : progress * 8.6;
+      time = reduced ? 0 : progress * REVEAL_SCENE_TIME;
       const next =
         progress === 1
           ? 6
@@ -55,6 +69,7 @@ export function PupLotteryAnimation({ duration }: { duration: number }) {
       }
       draw(time);
       if (progress < 1) frame = requestAnimationFrame(tick);
+      else onReveal();
     };
     draw(0);
     frame = requestAnimationFrame(tick);
@@ -64,7 +79,7 @@ export function PupLotteryAnimation({ duration }: { duration: number }) {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [duration]);
+  }, [duration, onReveal]);
 
   const [chapter, dialogue, subtitle] = chapters[phase];
   return (
@@ -77,12 +92,14 @@ export function PupLotteryAnimation({ duration }: { duration: number }) {
       <canvas
         ref={canvasRef}
         role="img"
-        aria-label="小狗小布誤播睡覺畫面，害羞地遮住照片，再切回抽籤結果。"
+        aria-label="小狗小布誤播眨眼吐舌的鬼臉照片，害羞地遮住照片，再切回抽籤結果。"
       />
       <div className="pup-lottery-footer">
-        <span className={eggFound ? "pup-lottery-egg-found" : ""}>
-          {eggFound ? "隱藏備忘：NUTC · 遠大密微 ✨" : "今天的抽籤主持：小布"}
-        </span>
+        {eggFound && (
+          <span className="pup-lottery-egg-found">
+            隱藏備忘：NUTC · 遠大密微 ✨
+          </span>
+        )}
         <div className="pup-lottery-corner">
           <button
             type="button"
@@ -92,7 +109,6 @@ export function PupLotteryAnimation({ duration }: { duration: number }) {
           >
             <BookOpen size={18} />
           </button>
-          <span>{phase === 6 ? "等待公布" : `${phase + 1} / 6`}</span>
         </div>
       </div>
     </section>
