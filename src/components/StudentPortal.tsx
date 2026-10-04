@@ -17,7 +17,6 @@ import {
   EyeOff,
   LogIn,
   Layers,
-  Users,
   LoaderCircle,
 } from 'lucide-react';
 
@@ -148,7 +147,7 @@ export const StudentPortal: React.FC = () => {
             <div className="min-w-0">
               <p className="text-xs sm:text-sm font-semibold text-blue-700">國立臺中科技大學 · 資訊與流通學院</p>
               <h1 className="mt-2 text-2xl sm:text-4xl font-black tracking-tight text-slate-900">專題報告場次查詢</h1>
-              <p className="mt-2 max-w-2xl text-sm sm:text-base leading-relaxed text-slate-600">登入後即可查看您的專題名稱、分組場次與上台順序。</p>
+              <p className="mt-2 max-w-2xl text-sm sm:text-base leading-relaxed text-slate-600">登入後即可查看您的專題名稱與抽籤後編號。</p>
             </div>
           </div>
         </header>
@@ -163,10 +162,10 @@ export const StudentPortal: React.FC = () => {
           <section className="order-2 rounded-[1.75rem] border border-blue-100 bg-blue-50/80 p-6 sm:p-8 lg:order-1">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-blue-700 shadow-sm"><UserCheck className="h-6 w-6" /></div>
             <h2 className="mt-6 text-xl sm:text-2xl font-black text-slate-900">查詢您的報告資訊</h2>
-            <p className="mt-3 text-sm leading-7 text-slate-600">使用組長學號與大會提供的密碼登入，即可確認專題的報告場次與上台順位。</p>
+            <p className="mt-3 text-sm leading-7 text-slate-600">使用組長學號與大會提供的密碼登入，即可確認專題的抽籤後編號。</p>
             <div className="mt-7 space-y-4 border-t border-blue-200/70 pt-6">
               <div className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-700 text-xs font-bold text-white">1</span><p className="text-sm leading-7 text-slate-700">輸入<span className="font-bold">組長學號</span>與登入密碼</p></div>
-              <div className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-700 text-xs font-bold text-white">2</span><p className="text-sm leading-7 text-slate-700">查看分組場次與報告順序</p></div>
+              <div className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-700 text-xs font-bold text-white">2</span><p className="text-sm leading-7 text-slate-700">查看抽籤後編號</p></div>
             </div>
           </section>
 
@@ -266,22 +265,11 @@ export const StudentPortal: React.FC = () => {
                   </div>}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 sm:gap-4" aria-label="抽籤結果">
-                  <section className="flex min-w-0 flex-col gap-2 rounded-2xl border border-blue-200 bg-blue-50 p-3 sm:p-4">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-blue-800 sm:gap-2 sm:text-sm">
-                      <Users className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
-                      分組場次
-                    </div>
-                    <div className="flex flex-wrap items-baseline justify-center gap-1 font-black text-blue-950" aria-label={`第 ${myProject.assigned_group ?? '—'} 組`}><span className="text-lg min-[400px]:text-xl">第</span><strong className={`leading-tight tabular-nums ${resultNumberSize(myProject.assigned_group)}`}>{myProject.assigned_group ?? '—'}</strong><span className="text-lg min-[400px]:text-xl">組</span></div>
-                  </section>
-                  <section className="flex min-w-0 flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 sm:p-4">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 sm:gap-2 sm:text-sm">
-                      <Award className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
-                      報告出場順序
-                    </div>
-                    <div className="flex flex-wrap items-baseline justify-center gap-1 font-black text-amber-950" aria-label={`第 ${myProject.draw_order} 位`}><span className="text-lg min-[400px]:text-xl">第</span><strong className={`leading-tight tabular-nums ${resultNumberSize(myProject.draw_order)}`}>{myProject.draw_order}</strong><span className="text-lg min-[400px]:text-xl">位</span></div>
-                  </section>
-                </div>
+                <section className="min-w-0 border-y border-blue-200 bg-blue-50 px-4 py-5 sm:px-6 sm:py-6" aria-label="抽籤結果">
+                  <h3 className="flex items-center gap-2 text-sm font-bold text-blue-800"><Award className="h-5 w-5 shrink-0" />抽籤後編號</h3>
+                  {myProject.draw_code?.trim() ? <p className={`mt-4 text-center font-black leading-tight tabular-nums text-blue-950 [overflow-wrap:anywhere] ${resultNumberSize(myProject.draw_code)}`}>{myProject.draw_code}</p>
+                    : <p className="mt-4 text-center text-lg font-bold text-blue-950">編號尚未設定</p>}
+                </section>
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
                   <div className="min-w-0">
@@ -304,7 +292,7 @@ export const StudentPortal: React.FC = () => {
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-amber-700 shadow-sm"><Clock className="h-6 w-6" /></div>
                     <div>
                       <h2 className="text-lg sm:text-2xl font-black text-slate-900">尚待現場抽籤</h2>
-                      <p className="mt-2 text-sm leading-relaxed text-slate-700">您的專題已登記。抽籤完成後，請按「更新結果」查看分組場次與報告順序。</p>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-700">您的專題已登記。抽籤完成後，請按「更新結果」查看抽籤後編號。</p>
                     </div>
                   </div>
                 </div>
@@ -314,10 +302,7 @@ export const StudentPortal: React.FC = () => {
                   <h3 className="mt-2 break-words text-lg sm:text-xl font-bold text-slate-900">{myProject.project_title}</h3>
                   {!sharedPasswordMode && <p className="mt-3 text-sm text-slate-600">所屬領域：{myProject.field}</p>}
                 </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 sm:p-6"><p className="flex items-center gap-2 text-sm font-bold text-blue-800"><Users className="h-5 w-5" />分組場次</p><p className="mt-5 text-xl font-bold text-blue-950">等待抽籤</p></div>
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6"><p className="flex items-center gap-2 text-sm font-bold text-amber-800"><Award className="h-5 w-5" />報告出場順序</p><p className="mt-5 text-xl font-bold text-amber-950">等待抽籤</p></div>
-                </div>
+                <section className="border-y border-blue-200 bg-blue-50 p-5 sm:p-6"><h3 className="flex items-center gap-2 text-sm font-bold text-blue-800"><Award className="h-5 w-5 shrink-0" />抽籤後編號</h3><p className="mt-5 text-xl font-bold text-blue-950">等待抽籤</p></section>
               </div>
             )}
           </div>
