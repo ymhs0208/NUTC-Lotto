@@ -7,7 +7,6 @@ import { getDomainColor } from '../lib/domainColors';
 import {
   UserCheck,
   Clock,
-  Award,
   AlertCircle,
   RefreshCw,
   ChevronRight,
@@ -17,15 +16,25 @@ import {
   Eye,
   EyeOff,
   LogIn,
-  Layers,
   LoaderCircle,
 } from 'lucide-react';
 
-function resultNumberSize(value: number | string | null | undefined): string {
-  const digits = String(value ?? '—').length;
-  if (digits >= 4) return 'text-2xl min-[400px]:text-[32px] sm:text-5xl';
-  if (digits === 3) return 'text-[32px] min-[400px]:text-[40px] sm:text-6xl';
-  return 'text-4xl min-[400px]:text-5xl sm:text-6xl';
+function StudentResultTable({ project }: { project: ProjectItem }) {
+  const drawn = !!project.draw_order;
+  const code = drawn ? project.draw_code?.trim() : '';
+  return <table className="w-full table-fixed border-collapse border border-slate-200 text-left" aria-label="抽籤結果">
+    <colgroup><col className="w-2/5 sm:w-1/3" /><col /></colgroup>
+    <thead className="bg-slate-50 text-xs text-slate-600 sm:text-sm"><tr>
+      <th scope="col" className="border-r border-slate-200 px-3 py-3 font-semibold sm:px-5">抽籤後編號</th>
+      <th scope="col" className="px-3 py-3 font-semibold sm:px-5">領域名稱</th>
+    </tr></thead>
+    <tbody><tr className="border-t border-slate-200">
+      <td className="border-r border-slate-200 px-3 py-5 align-middle sm:px-5">{code
+        ? <span className={`block font-bold leading-snug tabular-nums [overflow-wrap:anywhere] ${code.length > 6 ? 'text-lg sm:text-2xl' : 'text-2xl sm:text-3xl'}`} style={{ color: getDomainColor(project.field) }}>{code}</span>
+        : <span className="text-sm font-medium leading-6 text-slate-500">{drawn ? '編號尚未設定' : '等待抽籤'}</span>}</td>
+      <td className="px-3 py-5 align-middle text-sm font-semibold leading-6 text-slate-900 [overflow-wrap:anywhere] sm:px-5 sm:text-lg sm:leading-7">{project.field || '待抽籤後公布'}</td>
+    </tr></tbody>
+  </table>;
 }
 
 export const StudentPortal: React.FC = () => {
@@ -266,17 +275,7 @@ export const StudentPortal: React.FC = () => {
                   </div>}
                 </div>
 
-                <section className="grid min-w-0 grid-cols-1 gap-6 py-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:gap-8" aria-label="抽籤結果">
-                  <div className="flex min-h-32 min-w-0 flex-col justify-center border-l-4 pl-5 sm:pl-6" style={{ borderLeftColor: getDomainColor(myProject.field) }}>
-                    <h3 className="text-xs font-semibold text-slate-500 sm:text-sm">抽籤後編號</h3>
-                    {myProject.draw_code?.trim() ? <p className={`mt-3 font-black leading-tight tabular-nums [overflow-wrap:anywhere] ${resultNumberSize(myProject.draw_code)}`} style={{ color: getDomainColor(myProject.field) }}>{myProject.draw_code}</p>
-                      : <p className="mt-3 text-lg font-bold text-slate-800">編號尚未設定</p>}
-                  </div>
-                  <div className="flex min-w-0 flex-col justify-center gap-3 border-t border-slate-200 pt-5 sm:border-l sm:border-t-0 sm:pl-8 sm:pt-0">
-                    <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-500 sm:text-sm"><Layers className="h-4 w-4 shrink-0" />領域名稱</h3>
-                    <p className="text-xl font-bold leading-relaxed text-slate-900 [overflow-wrap:anywhere]">{myProject.field}</p>
-                  </div>
-                </section>
+                <StudentResultTable project={myProject} />
                 {!sharedPasswordMode && !!myProject.evaluators?.length && <p className="text-sm text-slate-600 px-1">
                   評審委員：{myProject.evaluators.join('、')}
                 </p>}
@@ -299,7 +298,7 @@ export const StudentPortal: React.FC = () => {
                   <h3 className="mt-2 break-words text-lg sm:text-xl font-bold text-slate-900">{myProject.project_title}</h3>
                   {!sharedPasswordMode && <p className="mt-3 text-sm text-slate-600">所屬領域：{myProject.field}</p>}
                 </div>
-                <section className="border-y border-blue-200 bg-blue-50 p-5 sm:p-6"><h3 className="flex items-center gap-2 text-sm font-bold text-blue-800"><Award className="h-5 w-5 shrink-0" />抽籤後編號</h3><p className="mt-5 text-xl font-bold text-blue-950">等待抽籤</p></section>
+                <StudentResultTable project={myProject} />
               </div>
             )}
           </div>
