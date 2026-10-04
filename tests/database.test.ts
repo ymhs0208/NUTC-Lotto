@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import type { DurableObjectState } from '@cloudflare/workers-types';
 import { LotteryDatabase } from '../server/cloudflareDatabase';
+import { staffLogCutoff } from '../server/logRetention';
 
 function database() {
   const sqlite = new DatabaseSync(':memory:');
@@ -23,7 +24,7 @@ function database() {
     async getAlarm() { return alarm; },
     async setAlarm(value: number) { alarm = value; alarmCalls.push(value); },
   };
-  const object = new LotteryDatabase({ storage } as unknown as DurableObjectState);
+  const object = new LotteryDatabase({ storage, blockConcurrencyWhile: (callback: () => Promise<unknown>) => callback() } as unknown as DurableObjectState);
   const call = async (operation: string, args = {}) => {
     const response = await object.fetch(new Request('https://internal', { method: 'POST', body: JSON.stringify({ operation, args }) }));
     return { status: response.status, ...await response.json() as any };
@@ -31,6 +32,40 @@ function database() {
   return { sqlite, object, call, alarmCalls };
 }
 const project = (id: string) => ({ id, leader_id: `student-${id}`, seq_no: id, education_system: '四技', department: '資管', class_name: '甲', advisor: '王教授', field: '企業智慧化', original_code: '', project_title: `專題 ${id}`, assigned_group: 1, draw_order: 1, draw_code: 'A01', evaluators: ['李教授'], password_hash: `scrypt-v1$${'a'.repeat(32)}$${'b'.repeat(64)}` });
+
+test('log retention uses three calendar months including month-end and leap years', () => {
+  for (const [now, cutoff] of [
+    ['2026-10-04T03:00:00.000Z', '2026-07-04T03:00:00.000Z'],
+    ['2026-05-31T03:00:00.000Z', '2026-02-28T03:00:00.000Z'],
+    ['2024-05-31T03:00:00.000Z', '2024-02-29T03:00:00.000Z'],
+    ['2026-01-31T03:00:00.000Z', '2025-10-31T03:00:00.000Z'],
+  ]) assert.equal(staffLogCutoff(new Date(now)), cutoff);
+});
+
+test('alarm removes only expired logs and keeps scheduling without any sessions', async () => {
+  const { sqlite, call, object, alarmCalls } = database();
+  try {
+    const state = { projects: [project('1')], domainConfigs: [] };
+    await call('save', { state, expectedVersion: 0 });
+    const before = (await call('load')).data;
+    const account = { id: 'admin', email: 'admin@example.edu.tw', role: 'admin', password_hash: project('1').password_hash };
+    await call('accounts', { accounts: [account] });
+    await call('save', { state, expectedVersion: 1, audit: { actorId: account.id, action: 'roster', summary: '1 件專題' } });
+    assert.equal(alarmCalls.length, 1);
+    sqlite.prepare('UPDATE staff_logs SET created_at = ?').run('2000-01-01T00:00:00.000Z');
+    sqlite.prepare('INSERT INTO staff_logs (created_at, actor_id, email, role, action, summary) VALUES (?, ?, ?, ?, ?, ?)').run(new Date().toISOString(), account.id, account.email, account.role, 'login', '新紀錄');
+    assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM sessions').get()!.n, 0);
+    await object.alarm();
+    assert.equal(alarmCalls.length, 2);
+    assert.deepEqual((await call('staffLogs')).data.logs.map((log: any) => log.summary), ['新紀錄']);
+    assert.deepEqual((await call('load')).data.projects, before.projects);
+    assert.deepEqual((await call('findAccount', { key: 'id', value: account.id })).data, account);
+    sqlite.prepare('UPDATE staff_logs SET created_at = ?').run('2000-01-01T00:00:00.000Z');
+    await object.alarm();
+    assert.equal((await call('staffLogs')).data.logs.length, 0);
+    assert.equal(alarmCalls.length, 2);
+  } finally { sqlite.close(); }
+});
 
 test('staff audit logs persist atomically, paginate, filter and exclude credentials', async () => {
   const { sqlite, call, object } = database();

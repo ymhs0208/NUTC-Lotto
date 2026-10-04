@@ -6,6 +6,7 @@ import { removeLegacyCredentials, projectDto, sharedPasswordHash } from './crede
 import { validateDomains, validateProjects } from './store';
 import { ApiError } from './errors';
 import { staffActions, type StaffAuditInput, type StaffLog } from '../src/types/staffLogs';
+import { staffLogCutoff } from './logRetention';
 
 export interface StaffAccount {
   id: string;
@@ -36,8 +37,19 @@ export class LotteryDatabase {
       CREATE TABLE IF NOT EXISTS sessions (scope TEXT NOT NULL, token_hash TEXT NOT NULL, expires_at TEXT NOT NULL, document TEXT NOT NULL, PRIMARY KEY(scope, token_hash));
       CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
       CREATE TABLE IF NOT EXISTS staff_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, actor_id TEXT NOT NULL, email TEXT NOT NULL, role TEXT NOT NULL, action TEXT NOT NULL, summary TEXT NOT NULL, version INTEGER);
+      CREATE INDEX IF NOT EXISTS staff_logs_created_at ON staff_logs(created_at);
     `);
     ctx.storage.sql.exec('INSERT OR IGNORE INTO metadata VALUES (1, ?, 0, ?)', JSON.stringify(defaultDomains), new Date().toISOString());
+    ctx.blockConcurrencyWhile(() => this.ensureCleanupAlarm());
+  }
+
+  private hasCleanupData() {
+    return !!this.one('SELECT token_hash FROM sessions LIMIT 1') || !!this.one('SELECT id FROM staff_logs LIMIT 1');
+  }
+  private async ensureCleanupAlarm() {
+    if (this.hasCleanupData() && await this.ctx.storage.getAlarm() === null) {
+      await this.ctx.storage.setAlarm(Date.now() + 60 * 60 * 1000);
+    }
   }
 
   private one<T>(sql: string, ...bindings: (string | number)[]): T | undefined {
@@ -127,7 +139,6 @@ export class LotteryDatabase {
             this.ctx.storage.sql.exec('INSERT INTO sessions VALUES (?, ?, ?, ?)', args.scope, args.tokenHash, session.expires_at, JSON.stringify(session));
             if (args.scope === 'staff') this.audit({ actorId: (session as StaffSession).user_id, action: 'login', summary: '工作人員登入成功' });
           });
-          if (await this.ctx.storage.getAlarm() === null) await this.ctx.storage.setAlarm(Date.now() + 60 * 60 * 1000);
           data = true; break;
         }
         case 'deleteSession': {
@@ -145,14 +156,17 @@ export class LotteryDatabase {
         }
         default: throw new ApiError(400, '無效資料庫操作。');
       }
+      await this.ensureCleanupAlarm();
       return Response.json({ data: data ?? null });
     } catch (error) {
       return Response.json({ error: error instanceof ApiError && error.status < 500 ? error.message : '資料庫暫時無法使用。' }, { status: error instanceof ApiError ? error.status : 503 });
     }
   }
   async alarm() {
-    this.ctx.storage.sql.exec('DELETE FROM sessions WHERE expires_at <= ?', new Date().toISOString());
-    if (this.one('SELECT token_hash FROM sessions LIMIT 1')) await this.ctx.storage.setAlarm(Date.now() + 60 * 60 * 1000);
+    const now = new Date();
+    this.ctx.storage.sql.exec('DELETE FROM sessions WHERE expires_at <= ?', now.toISOString());
+    this.ctx.storage.sql.exec('DELETE FROM staff_logs WHERE created_at <= ?', staffLogCutoff(now));
+    if (this.hasCleanupData()) await this.ctx.storage.setAlarm(now.getTime() + 60 * 60 * 1000);
   }
 }
 
