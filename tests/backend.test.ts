@@ -105,8 +105,13 @@ test('Workers persists data, authenticates staff/students and atomically enforce
     const drawLogs = (await req('/api/staff-logs?action=draw', undefined, adminCookie)).data.logs;
     assert.equal(drawLogs.length, 1); assert.equal(drawLogs[0].role, 'stage'); assert.equal(drawLogs[0].version, drawn.data.version);
     assert.equal(drawn.status, 200);
-    const publicResults = await req('/api/public-results'); assert.equal(publicResults.data.results.length, 2);
-    assert.deepEqual(Object.keys(publicResults.data.results[0]).sort(), ['assigned_group', 'draw_code', 'draw_order', 'field', 'original_code']);
+    for (const cookie of [undefined, adminCookie, stageCookie, student.cookie]) {
+      const removed = await req('/api/public-results', undefined, cookie);
+      assert.equal(removed.status, 404);
+      assert.equal(removed.data.success, false);
+      assert.equal(removed.data.results, undefined);
+    }
+    assert.equal((await req('/api/student/me', undefined, student.cookie)).data.project.draw_code, drawn.data.projects.find((p: any) => p.id === project.id).draw_code);
     assert.equal((await req('/api/lottery/reset', { version: beforeTest.version }, stageCookie)).status, 409);
     const current = (await req('/api/state', undefined, adminCookie)).data;
     const relabeled = await req('/api/domain-configs', { version: current.version, domainConfigs: [{ ...domains[0], drawPrefix: 'Z' }] }, adminCookie);

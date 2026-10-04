@@ -121,7 +121,7 @@ test('SQLite preserves credentials/results, enforces versions and rolls back fai
     const large = Array.from({ length: 2000 }, (_, i) => project(`large-${i}`));
     assert.equal((await call('save', { state: { ...saved, projects: large }, expectedVersion: 2 })).status, 200);
     const lookup = await call('findProject', { key: 'leader_key', value: 'student-large-1000' }); assert.equal(lookup.data.id, 'large-1000');
-    assert.equal((await call('publicResults')).data.length, 2000);
+    assert.equal((await call('publicResults')).status, 400);
     const latest = (await call('load')).data;
     assert.equal((await call('save', { state: { ...latest, projects: [] }, expectedVersion: 3 })).status, 200);
     assert.deepEqual((await call('load')).data.projects, []);

@@ -1,5 +1,5 @@
 import type { DurableObjectState } from '@cloudflare/workers-types';
-import type { DatabaseState, PublicResult } from './store';
+import type { DatabaseState } from './store';
 import type { StoredProject } from './credentials';
 import { normalizeOriginalCodes } from '../src/lib/originalCodes';
 import { removeLegacyCredentials, projectDto, sharedPasswordHash } from './credentials';
@@ -110,10 +110,6 @@ export class LotteryDatabase {
           if (email) { conditions.push('instr(lower(email), lower(?)) > 0'); bindings.push(email); }
           const rows = this.ctx.storage.sql.exec(`SELECT id, created_at, email, role, action, summary, version FROM staff_logs ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''} ORDER BY id DESC LIMIT 51`, ...bindings).toArray() as unknown as StaffLog[];
           data = { logs: rows.slice(0, 50), nextCursor: rows.length > 50 ? rows[49].id : null }; break;
-        }
-        case 'publicResults': {
-          data = this.ctx.storage.sql.exec(`SELECT json_extract(document, '$.field') AS field, json_extract(document, '$.original_code') AS original_code, json_extract(document, '$.assigned_group') AS assigned_group, json_extract(document, '$.draw_order') AS draw_order, json_extract(document, '$.draw_code') AS draw_code FROM projects WHERE json_extract(document, '$.draw_order') IS NOT NULL ORDER BY position`).toArray() as unknown as PublicResult[];
-          break;
         }
         case 'findProject': {
           if (args.key !== 'id' && args.key !== 'leader_key') throw new ApiError(400, '無效查詢。');

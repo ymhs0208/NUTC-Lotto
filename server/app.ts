@@ -171,9 +171,6 @@ app.post('/api/student/logout', route(async (req, res) => {
   await clearStudentSession(req, res);
   res.json({ success: true });
 }));
-app.get('/api/public-results', anonymousLimiter('results', 600, 6000), route(async (_req, res) => {
-  res.json({ success: true, results: await createStore().publicResults() });
-}));
 app.get('/api/state', route(async (req, res) => {
   const role = await authorize(req);
   res.json(staffState(await createStore().load(), role));

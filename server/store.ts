@@ -9,10 +9,6 @@ import { getDomainCode } from '../src/lib/domainCodes';
 import type { StaffAuditInput, StaffLogPage } from '../src/types/staffLogs';
 export { ApiError } from './errors';
 
-export interface PublicResult {
-  field: string; original_code: string; assigned_group: number | null;
-  draw_order: number; draw_code: string | null;
-}
 export interface DatabaseState {
   projects: StoredProject[];
   domainConfigs: DomainConfig[];
@@ -41,7 +37,6 @@ export function createStore() {
   return {
     load: () => call<DatabaseState>('load'),
     health: async () => { if (!await call<boolean>('health')) throw new ApiError(503, '資料庫暫時無法使用。'); },
-    publicResults: () => call<PublicResult[]>('publicResults'),
     findProject: (key: 'id' | 'leader_key', value: string) => call<StoredProject | null>('findProject', { key, value }),
     save: (state: DatabaseState, expectedVersion: number, audit?: StaffAuditInput) => call<DatabaseState>('save', { state, expectedVersion, audit }),
     staffLogs: (filters: { before?: number; action?: string; email?: string }) => call<StaffLogPage>('staffLogs', filters),

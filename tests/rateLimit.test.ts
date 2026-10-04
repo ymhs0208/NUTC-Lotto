@@ -115,7 +115,7 @@ for (const mode of ['Node', 'Workers'] as const) {
       } }; },
     };
     const { anonymousLimiter } = await import('../server/rateLimit');
-    const limiter = anonymousLimiter('results', 2, 3);
+    const limiter = anonymousLimiter('health', 2, 3);
     const attempt = (ip: string) => withRuntime(mode === 'Workers' ? { LOGIN_LIMITER: shared as any } : {},
       () => new Promise<number>((resolve, reject) => {
         let status = 200; let retryAfter: unknown;
