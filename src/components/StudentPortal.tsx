@@ -3,6 +3,7 @@ import { ApiRequestError, isRequestCancelled } from '../lib/api';
 import { useApiRequest } from '../lib/useApiRequest';
 import { hasStudentSessionHint, rememberStudentSessionHint, clearStudentSessionHint } from '../lib/studentSessionHint';
 import { ProjectItem } from '../types';
+import { getDomainColor } from '../lib/domainColors';
 import {
   UserCheck,
   Clock,
@@ -265,15 +266,15 @@ export const StudentPortal: React.FC = () => {
                   </div>}
                 </div>
 
-                <section className="grid min-w-0 grid-cols-1 border-y border-blue-200 bg-blue-50 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]" aria-label="抽籤結果">
-                  <div className="min-w-0 px-4 py-5 sm:px-6 sm:py-6">
-                    <h3 className="flex items-center gap-2 text-sm font-bold text-blue-800"><Award className="h-5 w-5 shrink-0" />抽籤後編號</h3>
-                    {myProject.draw_code?.trim() ? <p className={`mt-4 font-black leading-tight tabular-nums text-blue-950 [overflow-wrap:anywhere] ${resultNumberSize(myProject.draw_code)}`}>{myProject.draw_code}</p>
-                      : <p className="mt-4 text-lg font-bold text-blue-950">編號尚未設定</p>}
+                <section className="grid min-w-0 grid-cols-1 gap-6 py-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:gap-8" aria-label="抽籤結果">
+                  <div className="flex min-h-32 min-w-0 flex-col justify-center border-l-4 pl-5 sm:pl-6" style={{ borderLeftColor: getDomainColor(myProject.field) }}>
+                    <h3 className="text-xs font-semibold text-slate-500 sm:text-sm">抽籤後編號</h3>
+                    {myProject.draw_code?.trim() ? <p className={`mt-3 font-black leading-tight tabular-nums [overflow-wrap:anywhere] ${resultNumberSize(myProject.draw_code)}`} style={{ color: getDomainColor(myProject.field) }}>{myProject.draw_code}</p>
+                      : <p className="mt-3 text-lg font-bold text-slate-800">編號尚未設定</p>}
                   </div>
-                  <div className="flex min-w-0 flex-col justify-center gap-3 border-t border-blue-200 bg-slate-50 px-4 py-5 sm:border-l sm:border-t-0 sm:px-6 sm:py-6">
-                    <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-600"><Layers className="h-4 w-4 shrink-0" />領域名稱</h3>
-                    <p className="text-lg font-bold leading-relaxed text-slate-900 [overflow-wrap:anywhere] sm:text-xl">{myProject.field}</p>
+                  <div className="flex min-w-0 flex-col justify-center gap-3 border-t border-slate-200 pt-5 sm:border-l sm:border-t-0 sm:pl-8 sm:pt-0">
+                    <h3 className="flex items-center gap-2 text-xs font-semibold text-slate-500 sm:text-sm"><Layers className="h-4 w-4 shrink-0" />領域名稱</h3>
+                    <p className="text-xl font-bold leading-relaxed text-slate-900 [overflow-wrap:anywhere]">{myProject.field}</p>
                   </div>
                 </section>
                 {!sharedPasswordMode && !!myProject.evaluators?.length && <p className="text-sm text-slate-600 px-1">
