@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play, Settings, X } from 'lucide-react';
 import type { DomainConfig, ProjectItem } from '../types';
 import { buildResultSlides } from '../lib/resultPresentation';
+import { getDomainColor } from '../lib/domainColors';
 import { useModalFocus } from '../lib/useModalFocus';
 import './ResultCarousel.css';
 
@@ -79,7 +80,7 @@ export function ResultCarousel({ projects, domains, scope, onClose }: Props) {
   const groups = slides.map((page, position) => ({ page, position })).filter(({ page }) => page.page === 0);
   return (
     <section className="result-carousel" role="dialog" aria-modal="true" aria-label="抽籤結果輪播">
-      <header className="result-carousel-header">
+      <header className="result-carousel-header" style={{ '--domain-accent': getDomainColor(slide?.field) } as React.CSSProperties}>
         <div className="result-carousel-brand">
           <img className="result-carousel-logo" src="/android-chrome-512x512.png" alt="國立臺中科技大學專題成果展" width={56} height={56} />
           <div className="result-carousel-heading">

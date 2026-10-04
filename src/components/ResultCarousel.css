@@ -1,6 +1,6 @@
 .result-carousel { position:fixed; inset:0; z-index:80; height:100dvh; display:flex; flex-direction:column; gap:14px; padding:24px 36px 16px; color:#172b45; background:linear-gradient(130deg,#edf4fd,#fff 55%,#eef6ed); border-top:5px solid #28518a; font-variant-numeric:tabular-nums; }
 .result-carousel::before { content:''; position:absolute; top:-5px; left:33%; right:0; height:5px; background:linear-gradient(90deg,#356a32,#93466e); }
-.result-carousel-header { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.result-carousel-header { display:flex; justify-content:space-between; align-items:center; gap:16px; padding-bottom:12px; border-bottom:3px solid var(--domain-accent,#d9e3ed); }
 .result-carousel-brand { display:flex; align-items:center; gap:16px; flex:1; min-width:0; }
 .result-carousel-logo { width:56px; height:56px; object-fit:contain; flex-shrink:0; }
 .result-carousel-header>.result-control { flex-shrink:0; }
