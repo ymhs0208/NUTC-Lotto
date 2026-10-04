@@ -74,6 +74,11 @@ test('Workers persists data, authenticates staff/students and atomically enforce
     assert.equal(admin.data.session.access_token, undefined);
     const stage = await login('stage@example.edu.tw', 'stage'); assert.equal(stage.status, 200);
     const adminCookie = admin.cookie; const stageCookie = stage.cookie;
+    assert.equal((await req('/api/staff-logs')).status, 401);
+    assert.equal((await req('/api/staff-logs', undefined, stageCookie)).status, 403);
+    const loginLogs = (await req('/api/staff-logs?action=login', undefined, adminCookie)).data;
+    assert.equal(loginLogs.logs.length, 2);
+    assert.equal((await req('/api/staff-logs?before=invalid', undefined, adminCookie)).status, 400);
     const empty = (await req('/api/state', undefined, adminCookie)).data;
     assert.equal(empty.version, 0); assert.deepEqual(empty.projects, []); assert.equal(empty.domainConfigs.length, 7);
     const configured = await req('/api/domain-configs', { version: 0, domainConfigs: domains }, adminCookie); assert.equal(configured.status, 200);
@@ -97,6 +102,8 @@ test('Workers persists data, authenticates staff/students and atomically enforce
     assert.equal((await req('/api/lottery/test', { version: beforeTest.version }, adminCookie)).status, 200);
     assert.equal((await req('/api/state', undefined, adminCookie)).data.version, beforeTest.version);
     const drawn = await req('/api/lottery/draw', { version: beforeTest.version }, stageCookie);
+    const drawLogs = (await req('/api/staff-logs?action=draw', undefined, adminCookie)).data.logs;
+    assert.equal(drawLogs.length, 1); assert.equal(drawLogs[0].role, 'stage'); assert.equal(drawLogs[0].version, drawn.data.version);
     assert.equal(drawn.status, 200);
     const publicResults = await req('/api/public-results'); assert.equal(publicResults.data.results.length, 2);
     assert.deepEqual(Object.keys(publicResults.data.results[0]).sort(), ['assigned_group', 'draw_code', 'draw_order', 'field', 'original_code']);
@@ -127,6 +134,9 @@ test('Workers persists data, authenticates staff/students and atomically enforce
     const persisted = await req('/api/state', undefined, adminCookie); assert.equal(persisted.status, 200); assert.equal(persisted.data.version, shared.data.version); assert.ok(persisted.data.projects[0].draw_code);
     assert.equal((await req('/api/student/me', undefined, sharedLogin.cookie)).status, 200);
     const clear = await req('/api/student/shared-password', { version: shared.data.version, action: 'clear' }, adminCookie); assert.equal(clear.status, 200);
+    const persistedLogs = (await req('/api/staff-logs', undefined, adminCookie)).data.logs;
+    for (const action of ['login', 'roster', 'domains', 'draw', 'password_generate', 'password_clear']) assert.ok(persistedLogs.some((row: any) => row.action === action));
+    assert.ok(!JSON.stringify(persistedLogs).includes(shared.data.password));
     assert.equal((await req('/api/student/me', undefined, sharedLogin.cookie)).status, 401);
     assert.equal((await req('/api/auth/logout', {}, stageCookie)).status, 200); assert.equal((await req('/api/state', undefined, stageCookie)).status, 401);
     assert.equal((await worker.setup({ action: 'accounts', accounts: [{ ...accounts[0], password_hash: await hashPassword('Rotated-staff-password') }] })).status, 200);

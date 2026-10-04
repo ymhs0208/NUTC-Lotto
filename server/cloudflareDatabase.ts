@@ -5,6 +5,7 @@ import { normalizeOriginalCodes } from '../src/lib/originalCodes';
 import { removeLegacyCredentials, projectDto, sharedPasswordHash } from './credentials';
 import { validateDomains, validateProjects } from './store';
 import { ApiError } from './errors';
+import { staffActions, type StaffAuditInput, type StaffLog } from '../src/types/staffLogs';
 
 export interface StaffAccount {
   id: string;
@@ -34,6 +35,7 @@ export class LotteryDatabase {
       CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, document TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions (scope TEXT NOT NULL, token_hash TEXT NOT NULL, expires_at TEXT NOT NULL, document TEXT NOT NULL, PRIMARY KEY(scope, token_hash));
       CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
+      CREATE TABLE IF NOT EXISTS staff_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, actor_id TEXT NOT NULL, email TEXT NOT NULL, role TEXT NOT NULL, action TEXT NOT NULL, summary TEXT NOT NULL, version INTEGER);
     `);
     ctx.storage.sql.exec('INSERT OR IGNORE INTO metadata VALUES (1, ?, 0, ?)', JSON.stringify(defaultDomains), new Date().toISOString());
   }
@@ -50,7 +52,13 @@ export class LotteryDatabase {
     const projects = this.ctx.storage.sql.exec('SELECT document FROM projects ORDER BY position').toArray().map(row => JSON.parse(String(row.document)) as StoredProject);
     return { projects: normalizeOriginalCodes(projects), domainConfigs: JSON.parse(metadata.domains), version: metadata.version, lastUpdated: metadata.updated_at };
   }
-  private save(state: DatabaseState, expectedVersion: number): DatabaseState {
+  private audit(input: StaffAuditInput, version: number | null = null) {
+    if (!input || !Object.hasOwn(staffActions, input.action) || typeof input.summary !== 'string' || input.summary.length > 4096) throw new ApiError(400, '紀錄格式不正確。');
+    const account = this.document<StaffAccount>('SELECT document FROM accounts WHERE id = ?', input.actorId);
+    if (!account) throw new ApiError(401, '工作人員帳號已失效。');
+    this.ctx.storage.sql.exec('INSERT INTO staff_logs (created_at, actor_id, email, role, action, summary, version) VALUES (?, ?, ?, ?, ?, ?, ?)', new Date().toISOString(), account.id, account.email, account.role, input.action, input.summary, version);
+  }
+  private save(state: DatabaseState, expectedVersion: number, audit?: StaffAuditInput): DatabaseState {
     validateDomains(state.domainConfigs);
     validateProjects(state.projects.map(projectDto));
     const projects = normalizeOriginalCodes(removeLegacyCredentials(state.projects));
@@ -66,6 +74,7 @@ export class LotteryDatabase {
       const version = current.version + 1;
       const lastUpdated = new Date().toISOString();
       this.ctx.storage.sql.exec('UPDATE metadata SET domains = ?, version = ?, updated_at = ? WHERE id = 1', JSON.stringify(state.domainConfigs), version, lastUpdated);
+      if (audit) this.audit(audit, version);
       return { projects, domainConfigs: state.domainConfigs, version, lastUpdated };
     });
   }
@@ -78,7 +87,18 @@ export class LotteryDatabase {
       switch (operation) {
         case 'health': data = !!this.one('SELECT id FROM metadata WHERE id = 1'); break;
         case 'load': data = this.load(); break;
-        case 'save': data = this.save(args.state, args.expectedVersion); break;
+        case 'save': data = this.save(args.state, args.expectedVersion, args.audit); break;
+        case 'staffLogs': {
+          const { before, action, email = '' } = args;
+          if ((before !== undefined && (!Number.isSafeInteger(before) || before < 1)) || (action && !Object.hasOwn(staffActions, action)) || typeof email !== 'string' || email.length > 256) throw new ApiError(400, '紀錄查詢條件不正確。');
+          const conditions: string[] = [];
+          const bindings: (string | number)[] = [];
+          if (before !== undefined) { conditions.push('id < ?'); bindings.push(before); }
+          if (action) { conditions.push('action = ?'); bindings.push(action); }
+          if (email) { conditions.push('instr(lower(email), lower(?)) > 0'); bindings.push(email); }
+          const rows = this.ctx.storage.sql.exec(`SELECT id, created_at, email, role, action, summary, version FROM staff_logs ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''} ORDER BY id DESC LIMIT 51`, ...bindings).toArray() as unknown as StaffLog[];
+          data = { logs: rows.slice(0, 50), nextCursor: rows.length > 50 ? rows[49].id : null }; break;
+        }
         case 'publicResults': {
           data = this.ctx.storage.sql.exec(`SELECT json_extract(document, '$.field') AS field, json_extract(document, '$.original_code') AS original_code, json_extract(document, '$.assigned_group') AS assigned_group, json_extract(document, '$.draw_order') AS draw_order, json_extract(document, '$.draw_code') AS draw_code FROM projects WHERE json_extract(document, '$.draw_order') IS NOT NULL ORDER BY position`).toArray() as unknown as PublicResult[];
           break;
@@ -103,11 +123,21 @@ export class LotteryDatabase {
         }
         case 'putSession': {
           const session = args.session as Session;
-          this.ctx.storage.sql.exec('INSERT INTO sessions VALUES (?, ?, ?, ?)', args.scope, args.tokenHash, session.expires_at, JSON.stringify(session));
+          this.ctx.storage.transactionSync(() => {
+            this.ctx.storage.sql.exec('INSERT INTO sessions VALUES (?, ?, ?, ?)', args.scope, args.tokenHash, session.expires_at, JSON.stringify(session));
+            if (args.scope === 'staff') this.audit({ actorId: (session as StaffSession).user_id, action: 'login', summary: '工作人員登入成功' });
+          });
           if (await this.ctx.storage.getAlarm() === null) await this.ctx.storage.setAlarm(Date.now() + 60 * 60 * 1000);
           data = true; break;
         }
-        case 'deleteSession': this.ctx.storage.sql.exec('DELETE FROM sessions WHERE scope = ? AND token_hash = ?', args.scope, args.tokenHash); data = true; break;
+        case 'deleteSession': {
+          this.ctx.storage.transactionSync(() => {
+            const session = args.scope === 'staff' ? this.document<StaffSession>('SELECT document FROM sessions WHERE scope = ? AND token_hash = ?', args.scope, args.tokenHash) : undefined;
+            if (session && args.auditLogout !== false && session.expires_at > new Date().toISOString() && this.document('SELECT document FROM accounts WHERE id = ?', session.user_id)) this.audit({ actorId: session.user_id, action: 'logout', summary: '工作人員主動登出' });
+            this.ctx.storage.sql.exec('DELETE FROM sessions WHERE scope = ? AND token_hash = ?', args.scope, args.tokenHash);
+          });
+          data = true; break;
+        }
         case 'getSession': data = this.document('SELECT document FROM sessions WHERE scope = ? AND token_hash = ? AND expires_at > ?', args.scope, args.tokenHash, new Date().toISOString()); break;
         case 'studentLookup': {
           const row = this.one<{ document: string; credential_version: string }>(`SELECT p.document, json_extract(s.document, '$.credential_version') AS credential_version FROM sessions s JOIN projects p ON p.id = json_extract(s.document, '$.project_id') WHERE s.scope = 'student' AND s.token_hash = ? AND s.expires_at > ?`, args.tokenHash, new Date().toISOString());

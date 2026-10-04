@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AuthSession } from '../lib/auth';
-import { UserRound, ShieldCheck, ChevronDown, Mail, LogOut, LoaderCircle } from 'lucide-react';
+import { UserRound, ShieldCheck, ChevronDown, Mail, LogOut, LoaderCircle, ClipboardList } from 'lucide-react';
 
 interface NavbarProps {
   authSession?: AuthSession | null;
@@ -100,6 +100,7 @@ export const Navbar: React.FC<NavbarProps> = ({ authSession, onLogout }) => {
                 </div>
               </div>
               <div className="border-t border-slate-100 bg-slate-50/70 p-2">
+                {isAdmin && <a href="/logs" className="flex min-h-11 items-center justify-between rounded-md px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">工作人員操作紀錄<ClipboardList className="h-4 w-4" /></a>}
                 <button
                   onClick={() => void handleLogout()}
                   disabled={isLoggingOut}

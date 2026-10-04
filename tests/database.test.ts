@@ -32,6 +32,42 @@ function database() {
 }
 const project = (id: string) => ({ id, leader_id: `student-${id}`, seq_no: id, education_system: '四技', department: '資管', class_name: '甲', advisor: '王教授', field: '企業智慧化', original_code: '', project_title: `專題 ${id}`, assigned_group: 1, draw_order: 1, draw_code: 'A01', evaluators: ['李教授'], password_hash: `scrypt-v1$${'a'.repeat(32)}$${'b'.repeat(64)}` });
 
+test('staff audit logs persist atomically, paginate, filter and exclude credentials', async () => {
+  const { sqlite, call, object } = database();
+  try {
+    const account = { id: 'admin', email: 'admin@example.edu.tw', role: 'admin', password_hash: project('1').password_hash };
+    await call('accounts', { accounts: [account] });
+    const session = { user_id: account.id, credential_version: 'private-credential', created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 3600000).toISOString() };
+    assert.equal((await call('putSession', { scope: 'staff', tokenHash: 'private-token', session })).status, 200);
+    for (let version = 0; version < 55; version++) {
+      assert.equal((await call('save', { state: { projects: [], domainConfigs: [] }, expectedVersion: version, audit: { actorId: account.id, action: 'roster', summary: '0 件專題' } })).status, 200);
+    }
+    const page = (await call('staffLogs')).data;
+    assert.equal(page.logs.length, 50); assert.ok(page.nextCursor);
+    const next = (await call('staffLogs', { before: page.nextCursor })).data;
+    assert.equal(next.logs.length, 6); assert.equal(next.nextCursor, null);
+    assert.ok(next.logs.every((row: any) => row.id < page.nextCursor));
+    assert.equal((await call('staffLogs', { action: 'login', email: 'ADMIN@' })).data.logs.length, 1);
+    assert.equal((await call('staffLogs', { email: '%_' })).data.logs.length, 0);
+    assert.equal((await call('staffLogs', { before: -1 })).status, 400);
+    assert.equal((await call('staffLogs', { action: 'invalid' })).status, 400);
+    const audit = { actorId: account.id, action: 'reset', summary: '失敗操作' };
+    assert.equal((await call('save', { state: { projects: [], domainConfigs: [] }, expectedVersion: 0, audit })).status, 409);
+    sqlite.exec("CREATE TRIGGER fail_audit BEFORE INSERT ON staff_logs WHEN NEW.action = 'reset' BEGIN SELECT RAISE(ABORT, 'forced rollback'); END;");
+    assert.equal((await call('save', { state: { projects: [project('1')], domainConfigs: [] }, expectedVersion: 55, audit })).status, 503);
+    assert.equal((await call('load')).data.version, 55);
+    assert.deepEqual((await call('load')).data.projects, []);
+    assert.equal((await call('staffLogs', { action: 'reset' })).data.logs.length, 0);
+    await call('deleteSession', { scope: 'staff', tokenHash: 'private-token' });
+    await call('deleteSession', { scope: 'staff', tokenHash: 'private-token' });
+    assert.equal((await call('staffLogs', { action: 'logout' })).data.logs.length, 1);
+    await object.alarm();
+    const serialized = JSON.stringify((await call('staffLogs')).data);
+    for (const secret of ['private-token', 'private-credential', 'password_hash', account.password_hash]) assert.ok(!serialized.includes(secret));
+    assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM staff_logs').get()!.count, 57);
+  } finally { sqlite.close(); }
+});
+
 test('SQLite preserves credentials/results, enforces versions and rolls back failed transactions', async () => {
   const { sqlite, call } = database();
   try {

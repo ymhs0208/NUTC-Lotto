@@ -6,6 +6,7 @@ import { normalizeProfessorName } from '../src/lib/lottery';
 import { LotteryAllocationError, validateGroupCapacities } from '../src/lib/groupCapacities';
 import { ApiError } from './errors';
 import { getDomainCode } from '../src/lib/domainCodes';
+import type { StaffAuditInput, StaffLogPage } from '../src/types/staffLogs';
 export { ApiError } from './errors';
 
 export interface PublicResult {
@@ -42,11 +43,12 @@ export function createStore() {
     health: async () => { if (!await call<boolean>('health')) throw new ApiError(503, '資料庫暫時無法使用。'); },
     publicResults: () => call<PublicResult[]>('publicResults'),
     findProject: (key: 'id' | 'leader_key', value: string) => call<StoredProject | null>('findProject', { key, value }),
-    save: (state: DatabaseState, expectedVersion: number) => call<DatabaseState>('save', { state, expectedVersion }),
+    save: (state: DatabaseState, expectedVersion: number, audit?: StaffAuditInput) => call<DatabaseState>('save', { state, expectedVersion, audit }),
+    staffLogs: (filters: { before?: number; action?: string; email?: string }) => call<StaffLogPage>('staffLogs', filters),
     findAccount: (key: 'id' | 'email', value: string) => call<StaffAccount | null>('findAccount', { key, value }),
     putAccounts: (accounts: StaffAccount[]) => call<{ count: number }>('accounts', { accounts }),
     putSession: (scope: 'student' | 'staff', tokenHash: string, session: StudentSession | StaffSession) => call<boolean>('putSession', { scope, tokenHash, session }),
-    deleteSession: (scope: 'student' | 'staff', tokenHash: string) => call<boolean>('deleteSession', { scope, tokenHash }),
+    deleteSession: (scope: 'student' | 'staff', tokenHash: string, auditLogout = true) => call<boolean>('deleteSession', { scope, tokenHash, auditLogout }),
     getStaffSession: (tokenHash: string) => call<StaffSession | null>('getSession', { scope: 'staff', tokenHash }),
     studentLookup: (tokenHash: string) => call<{ project: StoredProject; credential_version: string } | null>('studentLookup', { tokenHash }),
   };

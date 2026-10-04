@@ -103,6 +103,17 @@ function staffState(state: DatabaseState, role: 'admin' | 'stage') {
     projects: state.projects.map(p => ({ ...projectDto(p), password_set: !!p.password_hash && !p.password })),
   };
 }
+async function saveStaffOperation(req: Request, store: ReturnType<typeof createStore>, state: DatabaseState) {
+  const session = (await getStaffSession(req))!;
+  const action = req.path === '/api/projects' ? 'roster' : req.path === '/api/domain-configs' ? 'domains'
+    : req.path === '/api/student/shared-password' ? (req.body.action === 'clear' ? 'password_clear' : 'password_generate')
+    : req.path === '/api/lottery/draw' ? 'draw' : 'reset';
+  const fields = action === 'draw' || action === 'reset'
+    ? resolveLotteryFields(req.body, [...new Set([...state.domainConfigs.map(c => c.field), ...state.projects.map(p => p.field)])]) : null;
+  const count = fields ? state.projects.filter(p => fields.has(p.field)).length : state.projects.length;
+  const summary = fields ? `${count} 件專題；領域：${[...fields].join('、')}` : `${count} 件專題；${state.domainConfigs.length} 個領域`;
+  return store.save(state, state.version, { actorId: session.userId, action, summary: summary.slice(0, 4096) });
+}
 function checkVersion(req: Request, state: DatabaseState) {
   if (!Number.isInteger(req.body.version)) throw new ApiError(400, '缺少資料版本，請重新整理。');
   if (req.body.version !== state.version) throw new ApiError(409, '資料已由其他人更新，請重新整理後再操作。');
@@ -167,6 +178,12 @@ app.get('/api/state', route(async (req, res) => {
   const role = await authorize(req);
   res.json(staffState(await createStore().load(), role));
 }));
+app.get('/api/staff-logs', route(async (req, res) => {
+  await authorize(req, true);
+  if (Object.values(req.query).some(value => typeof value !== 'string')) throw new ApiError(400, '紀錄查詢條件不正確。');
+  const result = await createStore().staffLogs({ before: req.query.before === undefined ? undefined : Number(req.query.before), action: req.query.action as string | undefined, email: req.query.email as string | undefined });
+  res.json({ success: true, ...result });
+}));
 app.get('/api/projects', route(async (req, res) => {
   await authorize(req, true);
   res.json(staffState(await createStore().load(), 'admin'));
@@ -192,7 +209,7 @@ app.post('/api/projects', route(async (req, res) => {
   }
   validateDomains(state.domainConfigs);
   state.projects = await prepareProjects(req.body.projects, state.projects);
-  res.json(staffState(await store.save(state, state.version), 'admin'));
+  res.json(staffState(await saveStaffOperation(req, store, state), 'admin'));
 }));
 app.post('/api/student/shared-password', route(async (req, res) => {
   await authorize(req, true);
@@ -204,7 +221,7 @@ app.post('/api/student/shared-password', route(async (req, res) => {
   if (!state.projects.length) throw new ApiError(400, '請先匯入學生名冊。');
   if (req.body.action === 'clear') {
     state.projects = state.projects.map(p => ({ ...projectDto(p) }));
-    const saved = await store.save(state, state.version);
+    const saved = await saveStaffOperation(req, store, state);
     invalidateSharedPasswordVerification();
     res.json(staffState(saved, 'admin'));
     return;
@@ -212,7 +229,7 @@ app.post('/api/student/shared-password', route(async (req, res) => {
   const password = Array.from(randomBytes(8), byte => SHARED_PASSWORD_ALPHABET[byte & 31]).join('');
   const password_hash = await hashPassword(password);
   state.projects = state.projects.map(p => ({ ...projectDto(p), password_hash, shared_password_mode: true }));
-  const saved = await store.save(state, state.version);
+  const saved = await saveStaffOperation(req, store, state);
   invalidateSharedPasswordVerification();
   res.json({ ...staffState(saved, 'admin'), password });
 }));
@@ -250,7 +267,7 @@ app.post('/api/domain-configs', route(async (req, res) => {
     }
   }
   for (const cfg of changedPrefixes) state.projects = relabelDomainResults(state.projects, cfg.field, cfg.drawPrefix);
-  res.json(staffState(await store.save(state, state.version), 'admin'));
+  res.json(staffState(await saveStaffOperation(req, store, state), 'admin'));
 }));
 app.post('/api/lottery/test', route(async (req, res) => {
   await authorize(req, true);
@@ -278,7 +295,7 @@ app.post('/api/lottery/draw', route(async (req, res) => {
     if (error instanceof LotteryAllocationError) throw new ApiError(400, error.message);
     throw error;
   }
-  const saved = await store.save(state, state.version);
+  const saved = await saveStaffOperation(req, store, state);
   res.json({ ...staffState(saved, role), summary: `抽籤完成，${pool.length} 件專題結果已儲存。` });
 }));
 app.post('/api/lottery/reset', route(async (req, res) => {
@@ -288,7 +305,7 @@ app.post('/api/lottery/reset', route(async (req, res) => {
   checkVersion(req, state);
   const fields = resolveLotteryFields(req.body, [...new Set([...state.domainConfigs.map(c => c.field), ...state.projects.map(p => p.field)])]);
   state.projects = state.projects.map(p => fields.has(p.field) ? { ...p, assigned_group: null, draw_order: null, draw_code: null, draw_time: null, evaluators: [] } : p);
-  res.json(staffState(await store.save(state, state.version), role));
+  res.json(staffState(await saveStaffOperation(req, store, state), role));
 }));
 app.use('/api', (_req, res) => { res.status(404).json({ success: false, error: '找不到此 API。' }); });
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

@@ -20,7 +20,7 @@ export function getAuthSession(): AuthSession | null { return currentSession; }
 export function saveAuthSession(session: AuthSession): void { currentSession = session; }
 export function clearAuthSession(): void { currentSession = null; }
 
-export function hasPermissionForView(role: UserRole, view: 'stage' | 'admin' | 'student'): boolean {
+export function hasPermissionForView(role: UserRole, view: 'stage' | 'admin' | 'student' | 'logs'): boolean {
   if (view === 'student') return true;
   if (role === 'admin') return true; // Admin has full access to both stage and admin
   if (role === 'stage' && view === 'stage') return true; // Stage staff can access stage lottery

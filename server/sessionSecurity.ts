@@ -33,6 +33,6 @@ export function readSessionToken(req: Request, scope: SessionScope): string | nu
 export function sessionScopeForPath(path: string): SessionScope | null {
   path = path.toLowerCase().replace(/\/+$/, '');
   if (['/student/me', '/student/logout'].includes(path)) return 'student';
-  if (['/auth/me', '/auth/logout', '/state', '/projects', '/domain-configs', '/student/shared-password', '/lottery/test', '/lottery/draw', '/lottery/reset'].includes(path)) return 'staff';
+  if (['/auth/me', '/auth/logout', '/state', '/staff-logs', '/projects', '/domain-configs', '/student/shared-password', '/lottery/test', '/lottery/draw', '/lottery/reset'].includes(path)) return 'staff';
   return null;
 }

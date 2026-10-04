@@ -23,6 +23,7 @@ import { getViewFromLocation, canonicalPageUrl, viewPath, viewTitles } from './l
 
 const StageLottery = lazy(() => import('./components/StageLottery').then(module => ({ default: module.StageLottery })));
 const AdminManagement = lazy(() => import('./components/AdminManagement').then(module => ({ default: module.AdminManagement })));
+const StaffLogs = lazy(() => import('./components/StaffLogs').then(module => ({ default: module.StaffLogs })));
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewMode>(() => getViewFromLocation(window.location));
@@ -108,7 +109,7 @@ export default function App() {
     const controller = new AbortController();
     loadControllerRef.current = controller;
     const requestId = ++loadRequestIdRef.current;
-    if (!getAuthSession()) {
+    if (!getAuthSession() || currentView === 'logs') {
       setProjects([]);
       setDomainConfigs([]);
       setSharedPasswordEnabled(false);
@@ -127,7 +128,7 @@ export default function App() {
     } finally {
       if (requestId === loadRequestIdRef.current) setIsLoading(false);
     }
-  }, [request]);
+  }, [request, currentView]);
 
   useEffect(() => { void loadData(); return () => { loadControllerRef.current?.abort(); }; }, [loadData, authSession]);
   useEffect(() => {
@@ -224,6 +225,11 @@ export default function App() {
               )
             )}
 
+            {currentView === 'logs' && (
+              !hasPermissionForView(authSession?.role || null, 'logs')
+                ? <AuthGate targetView="admin" onSuccess={setAuthSession} />
+                : <StaffLogs />
+            )}
             {currentView === 'admin' && (
               !hasPermissionForView(authSession?.role || null, 'admin') ? (
                 <AuthGate

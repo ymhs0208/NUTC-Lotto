@@ -9,13 +9,13 @@ import { readSessionToken, signSessionToken, sessionWork } from './sessionSecuri
 
 const COOKIE = 'ntcust_staff_session';
 const options = () => ({ httpOnly: true, secure: runtimeEnv().NODE_ENV === 'production', sameSite: 'strict' as const, path: '/api' });
-export async function clearStaffSession(req: Request, res: Response) {
+export async function clearStaffSession(req: Request, res: Response, auditLogout = true) {
   const token = readSessionToken(req, 'staff');
-  if (token) await sessionWork.run(() => createStore().deleteSession('staff', fingerprint(token)));
+  if (token) await sessionWork.run(() => createStore().deleteSession('staff', fingerprint(token), auditLogout));
   res.clearCookie(COOKIE, options());
 }
 export async function createStaffSession(req: Request, res: Response, account: StaffAccount, remember: boolean) {
-  await clearStaffSession(req, res);
+  await clearStaffSession(req, res, false);
   const token = randomBytes(32).toString('hex');
   const createdAt = new Date().toISOString();
   const expiresAt = Date.now() + 60 * 60 * 1000;
