@@ -13,6 +13,9 @@
 .domain-scope-list { max-height:min(330px,45dvh); overflow:auto; }
 .domain-scope-list label { display:flex; align-items:center; gap:10px; min-height:44px; padding:8px 4px; font-size:13px; font-weight:600; cursor:pointer; }
 .domain-scope-list input { width:17px; height:17px; accent-color:#28518a; flex-shrink:0; }
+.domain-scope-list .domain-scope-locked { color:#94a3b8; cursor:not-allowed; }
+.domain-scope-list .domain-scope-locked small { color:#94a3b8; }
+.domain-scope-picker .domain-scope-options button:disabled { opacity:.5; cursor:not-allowed; }
 .domain-scope-list small { color:#52657a; white-space:nowrap; margin-left:auto; }
 .domain-scope-help { margin-top:10px; padding-top:10px; border-top:1px solid #e2e8f0; font-size:11px; color:#52657a; }
 .stage-presentation-tools .domain-scope-picker { width:min(310px,40vw); }

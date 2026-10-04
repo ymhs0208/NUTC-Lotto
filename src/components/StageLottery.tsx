@@ -9,6 +9,7 @@ import { FloatingNotice } from './FloatingNotice';
 import confetti from 'canvas-confetti';
 import './StageLottery.css';
 import { PupLotteryAnimation, pupLotteryDuration } from './PupLotteryAnimation';
+import { getDrawableFields } from '../lib/lotterySelection';
 import {
   RotateCcw,
   Maximize2,
@@ -72,6 +73,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
   // In-app modal states
   const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
+  const [resetFields, setResetFields] = useState<string[]>([]);
   const [isResetting, setIsResetting] = useState(false);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
 
@@ -84,6 +86,9 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
   );
 
   const undrawnPool = currentPool.filter((p) => !p.draw_order);
+  const drawFields = getDrawableFields(domainConfigs.filter(cfg => includesField(cfg.field)).map(cfg => cfg.field), projects);
+  const drawablePool = undrawnPool.filter(project => drawFields.includes(project.field));
+  const completedFields = domainConfigs.filter(cfg => projects.some(project => project.field === cfg.field && !!project.draw_order)).map(cfg => cfg.field);
   const drawnPool = currentPool
     .filter((p) => !!p.draw_order)
     .sort((a, b) => {
@@ -164,7 +169,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
    * Open Batch Confirmation Modal
    */
   const handleOpenBatchModal = () => {
-    if (undrawnPool.length === 0) {
+    if (drawablePool.length === 0) {
       setNoticeMessage('目前範圍內無尚未抽籤的組別！如需重新抽籤請先點擊重設。');
       return;
     }
@@ -176,7 +181,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
    */
   const handleConfirmBatchDraw = async () => {
     setIsBatchModalOpen(false);
-    if (undrawnPool.length === 0 || isAnimating) return;
+    if (drawablePool.length === 0 || isAnimating) return;
     if (dataVersion === null) { setNoticeMessage('資料尚未載入，請重新整理後再試。'); return; }
 
     const duration = pupLotteryDuration();
@@ -188,7 +193,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
       // Reveal the saved results exactly when 小布 presses the remote again.
       const [backendResult] = await Promise.all([
         request<StoreState & { summary: string }>('/api/lottery/draw', {
-          ...(selectedFields === null ? { field: 'ALL' } : { fields: selectedFields }),
+          fields: drawFields,
           version: dataVersion,
         }),
         revealReady,
@@ -218,20 +223,23 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
    * Reset draw
    */
   const handleOpenResetModal = () => {
-    if (drawnPool.length === 0) {
-      setNoticeMessage('目前此範圍內尚無任何已抽籤的組別。');
+    if (completedFields.length === 0) {
+      setNoticeMessage('目前尚無任何已抽籤的領域。');
       return;
     }
+    const inScope = completedFields.filter(includesField);
+    setResetFields(inScope.length ? inScope : completedFields);
     setIsResetModalOpen(true);
   };
 
   const handleConfirmReset = async () => {
-    if (isResetting) return;
+    if (isResetting || resetFields.length === 0) return;
     if (dataVersion === null) { setNoticeMessage('資料尚未載入，請重新整理後再試。'); return; }
     setIsResetting(true);
     try {
-      const data = await request('/api/lottery/reset', { ...(selectedFields === null ? { field: 'ALL' } : { fields: selectedFields }), version: dataVersion });
+      const data = await request('/api/lottery/reset', { fields: resetFields, version: dataVersion });
       onApplyState(data);
+      changeFields(resetFields);
       setBatchDrawSummary(null);
       setIsResetModalOpen(false);
     } catch (error) {
@@ -263,7 +271,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
         </div>
         <div className="stage-presentation-tools">
           <DomainScopePicker domains={domainConfigs} projects={projects} selected={selectedFields} disabled={isAnimating || isResetting} onChange={changeFields} />
-          <button type="button" onClick={handleOpenResetModal} disabled={isAnimating || drawnPool.length === 0} aria-label="重設結果"><RotateCcw size={18} /></button>
+          <button type="button" onClick={handleOpenResetModal} disabled={isAnimating || isResetting || completedFields.length === 0} aria-label="重設結果"><RotateCcw size={18} /></button>
           <button type="button" onClick={toggleFullscreen} aria-label="退出全螢幕"><Minimize2 size={18} /><span>退出全螢幕</span></button>
         </div>
       </header>}
@@ -298,7 +306,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                 {isFullscreen ? '退出全螢幕' : '全螢幕展示'}
               </button>
-              <button onClick={handleOpenResetModal} disabled={isAnimating || drawnPool.length === 0} type="button" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 px-4 py-3 text-sm font-bold text-slate-700 hover:text-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" title="重設此範圍抽籤結果">
+              <button onClick={handleOpenResetModal} disabled={isAnimating || isResetting || completedFields.length === 0} type="button" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 px-4 py-3 text-sm font-bold text-slate-700 hover:text-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" title="選擇領域並重設抽籤結果">
                 <RotateCcw className="w-4 h-4" />
                 <span className="hidden sm:inline">重設結果</span>
               </button>
@@ -464,7 +472,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
           <div className={isFullscreen ? 'stage-presentation-buttons' : 'flex w-full flex-col items-center gap-3'}>
           {(!isFullscreen || undrawnPool.length > 0 || isAnimating) && <button
             onClick={handleOpenBatchModal}
-            disabled={isAnimating || undrawnPool.length === 0}
+            disabled={isAnimating || drawablePool.length === 0}
             className="w-full sm:w-auto min-w-[260px] sm:min-w-[340px] px-8 py-4 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-base sm:text-lg shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:hover:scale-100 disabled:shadow-none flex items-center justify-center gap-2.5 cursor-pointer"
           >
             <Zap className="w-5 h-5 fill-current shrink-0 animate-pulse" />
@@ -851,14 +859,14 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                 <span>抽籤規則說明：</span>
               </div>
               <ul className="list-disc list-inside space-y-1 text-slate-600">
-                <li><strong>本次範圍</strong>：{selectedFields === null ? '全校所有領域' : selectedField || '尚未選擇'}，共 {currentPool.length} 件專題。</li>
+                <li><strong>本次範圍</strong>：{drawFields.join('、') || '尚未選擇'}，共 {drawablePool.length} 件專題。</li>
                 <li>
                   <strong>各領域獨立排序</strong>：每個領域依其設定的「分組組數」分別獨立產生順序（例如：第 1 組、第 2 組等各自從順序 01 起跳）。
                 </li>
                 <li>
                   <strong>抽籤後編號</strong>：A 企業智慧化、B 數位內容與多媒體應用、C 網路應用與資通安全、D 嵌入式系統與行動計算、E 智慧運算創新應用、F 智慧流通應用與研究、G 進修部。各領域從 01 連續編號，跨組不重複，例如 A01、A02。
                 </li>
-                {domainConfigs.filter(cfg => includesField(cfg.field) && cfg.groupCapacities).map(cfg => (
+                {domainConfigs.filter(cfg => drawFields.includes(cfg.field) && cfg.groupCapacities).map(cfg => (
                   <li key={cfg.id}><strong>{cfg.field} 指定件數</strong>：{Array.from({ length: cfg.groupCount }, (_, i) => `第 ${i + 1} 組 ${cfg.groupCapacities![i + 1]} 件`).join('、')}。抽籤將同時遵守指定件數與指導老師迴避。</li>
                 ))}
               </ul>
@@ -894,13 +902,17 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
               <div>
                 <h3 className="text-base font-bold text-slate-900">確定重設抽籤結果？</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  {selectedField === 'ALL'
-                    ? '這將會清空「全校所有領域」已抽出的報告序位，所有專題組別將回到「未抽籤」狀態。'
-                    : `這將會清空「${selectedField}」領域已抽出的報告序位。`}
+                  請勾選要重設的領域。所選領域的報告序位將清空，回到未抽籤狀態。
                 </p>
               </div>
             </div>
 
+            <div role="group" aria-label="選擇要重設的領域" className="max-h-60 overflow-y-auto space-y-2">
+              {completedFields.map(field => <label key={field} className="flex items-center gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+                <input type="checkbox" disabled={isResetting} checked={resetFields.includes(field)} onChange={event => setResetFields(current => event.target.checked ? [...current, field] : current.filter(value => value !== field))} />
+                <span>{field}</span>
+              </label>)}
+            </div>
             <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 onClick={() => setIsResetModalOpen(false)}
@@ -911,7 +923,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
               </button>
               <button
                 onClick={handleConfirmReset}
-                disabled={isResetting}
+                disabled={isResetting || resetFields.length === 0}
                 className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-rose-700 disabled:opacity-60 cursor-pointer"
               >
                 {isResetting && <RotateCcw className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
