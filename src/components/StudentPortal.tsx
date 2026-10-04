@@ -22,19 +22,21 @@ import {
 function StudentResultTable({ project }: { project: ProjectItem }) {
   const drawn = !!project.draw_order;
   const code = drawn ? project.draw_code?.trim() : '';
-  return <table className="w-full table-fixed border-collapse border border-slate-200 text-left" aria-label="抽籤結果">
+  return <div className="overflow-hidden rounded-lg border border-blue-200">
+    <table className="w-full table-fixed border-collapse bg-white text-left" aria-label="抽籤結果">
     <colgroup><col className="w-2/5 sm:w-1/3" /><col /></colgroup>
-    <thead className="bg-slate-50 text-xs text-slate-600 sm:text-sm"><tr>
-      <th scope="col" className="border-r border-slate-200 px-3 py-3 font-semibold sm:px-5">抽籤後編號</th>
+    <thead className="bg-blue-50 text-xs text-blue-800 sm:text-sm"><tr>
+      <th scope="col" className="border-r border-blue-200 px-3 py-3 font-semibold sm:px-5">抽籤後編號</th>
       <th scope="col" className="px-3 py-3 font-semibold sm:px-5">領域名稱</th>
     </tr></thead>
-    <tbody><tr className="border-t border-slate-200">
+    <tbody><tr className="border-t border-blue-200">
       <td className="border-r border-slate-200 px-3 py-5 align-middle sm:px-5">{code
         ? <span className={`block font-bold leading-snug tabular-nums [overflow-wrap:anywhere] ${code.length > 6 ? 'text-lg sm:text-2xl' : 'text-2xl sm:text-3xl'}`} style={{ color: getDomainColor(project.field) }}>{code}</span>
         : <span className="text-sm font-medium leading-6 text-slate-500">{drawn ? '編號尚未設定' : '等待抽籤'}</span>}</td>
       <td className="px-3 py-5 align-middle text-sm font-semibold leading-6 text-slate-900 [overflow-wrap:anywhere] sm:px-5 sm:text-lg sm:leading-7">{project.field || '待抽籤後公布'}</td>
     </tr></tbody>
-  </table>;
+    </table>
+  </div>;
 }
 
 export const StudentPortal: React.FC = () => {
