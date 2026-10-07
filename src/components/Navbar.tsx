@@ -65,8 +65,6 @@ export const Navbar: React.FC<NavbarProps> = ({ authSession, onLogout }) => {
           </div>
         </a>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <a href="/results" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800 hover:bg-blue-100 focus-visible:outline-2 focus-visible:outline-blue-600 sm:text-sm">各領域結果</a>
         {authSession && onLogout && (
           <details ref={menuRef} className="group relative shrink-0">
             <summary
@@ -127,7 +125,6 @@ export const Navbar: React.FC<NavbarProps> = ({ authSession, onLogout }) => {
             </div>
           </details>
         )}
-        </div>
       </div>
     </header>
   );
