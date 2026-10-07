@@ -507,7 +507,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
   // Export Excel
   const handleExport = () => withExcelTools('export', ({ exportToExcel }) => exportToExcel(projects, '台中科技大學專題展報告抽籤結果'));
-  const handleDownloadTemplate = () => withExcelTools('template', ({ downloadInputTemplate }) => downloadInputTemplate());
+  const handleDownloadTemplate = () => withExcelTools('template', ({ downloadInputTemplate }) => downloadInputTemplate(domainConfigs));
 
   // Confirm project deletion
   const handleConfirmDelete = withSaveFeedback('delete-project', async () => {

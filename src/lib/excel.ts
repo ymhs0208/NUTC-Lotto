@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
-import { ProjectItem } from '../types';
+import { ProjectItem, DomainConfig } from '../types';
+import { formatSessionLabel } from './sessionLabel';
+import { getDomainCode } from './domainCodes';
 import { normalizeOriginalCodes } from './originalCodes';
 
 export const REQUIRED_INPUT_HEADERS = [
@@ -9,7 +11,7 @@ export const REQUIRED_INPUT_HEADERS = [
   '班級',
   '指導老師',
   '領域',
-  '編號',
+  '原始編號',
   '專題名稱',
   '組長學號',
   '組長密碼'
@@ -22,10 +24,12 @@ export const REQUIRED_OUTPUT_HEADERS = [
   '班級',
   '指導老師',
   '領域',
-  '編號',
+  '原始編號',
   '專題名稱',
   '組長學號',
-  '+編號(抽籤後)'
+  '抽籤編號',
+  '報告場次',
+  '組內順序'
 ];
 
 export { preserveImportedProjectIds } from './importProjects';
@@ -79,12 +83,15 @@ export async function parseExcelFile(file: File): Promise<{
     const classKey = findKey('班級');
     const advisorKey = findKey('指導老師');
     const fieldKey = findKey('領域');
-    const codeKey = findKey('編號');
+    const codeKey = findKey('原始編號') || findKey('編號');
     const titleKey = findKey('專題名稱');
     const leaderKey = findKey('組長學號');
     const passwordKey = findKey('組長密碼') || findKey('密碼') || findKey('登入密碼');
     // Check if there is already a draw code column in this excel
-    const drawCodeKey = findKey('+編號(抽籤後)') || findKey('編號(抽籤後)') || findKey('抽籤後編號') || findKey('抽籤序號');
+    const drawCodeKey = findKey('抽籤編號') || findKey('+編號(抽籤後)') || findKey('編號(抽籤後)') || findKey('抽籤後編號') || findKey('抽籤序號');
+
+    const sessionKey = findKey('報告場次') || findKey('分組場次') || findKey('組別');
+    const orderKey = findKey('組內順序') || findKey('報告順位');
 
     // Validation warning
     if (!titleKey || !leaderKey) {
@@ -111,7 +118,24 @@ export async function parseExcelFile(file: File): Promise<{
       const advisor = advisorKey && row[advisorKey] ? String(row[advisorKey]).trim() : '指導教授群';
       const field = fieldKey && row[fieldKey] ? String(row[fieldKey]).trim() : '綜合領域';
       const originalCode = codeKey && row[codeKey] ? String(row[codeKey]).trim() : `PRJ-${String(index + 1).padStart(2, '0')}`;
-      const drawCodeVal = drawCodeKey && row[drawCodeKey] ? String(row[drawCodeKey]).trim() : null;
+      const rawDrawCode = drawCodeKey ? String(row[drawCodeKey] || '').trim() : '';
+      const drawCodeVal = rawDrawCode && !['未抽籤', '待抽籤', '編號尚未提供', '編號未設定'].includes(rawDrawCode) ? rawDrawCode : null;
+      const readPosition = (key: string | undefined, isSession: boolean): number | null => {
+        const value = key ? String(row[key] ?? '').normalize('NFKC').replace(/\s+/g, '') : '';
+        if (!value || ['未抽籤', '待抽籤', '待分配', '場次尚未提供', '—', '-'].includes(value)) return null;
+        if (isSession) {
+          const chinese = Array.from({ length: 50 }, (_, i) => i + 1).find(n => formatSessionLabel(n) === value);
+          if (chinese) return chinese;
+        }
+        const match = value.match(isSession ? /^(?:第)?([1-9]\d*)(?:場次|組)?$/ : /^(?:第)?([1-9]\d*)(?:位)?$/);
+        const number = match ? Number(match[1]) : NaN;
+        if (!Number.isSafeInteger(number) || number < 1 || (isSession && number > 50)) throw new Error(`第 ${index + 2} 列${isSession ? '報告場次' : '組內順序'}格式不正確。`);
+        return number;
+      };
+      const assignedGroup = readPosition(sessionKey, true);
+      // New exports carry the true within-session position. Legacy files retain
+      // their historical fallback only when no explicit order column exists.
+      const drawOrder = orderKey ? readPosition(orderKey, false) : drawCodeVal ? parseInt(drawCodeVal.replace(/\D/g, ''), 10) || null : null;
       const parsedPassword = passwordKey && row[passwordKey] ? String(row[passwordKey]).trim() : '';
       const password = parsedPassword;
       if (password && (password.length < 8 || password.length > 128 || password === leaderId)) throw new Error(`第 ${index + 2} 列密碼須為 8 至 128 字元且不可使用學號。`);
@@ -128,9 +152,10 @@ export async function parseExcelFile(file: File): Promise<{
         project_title: title,
         leader_id: leaderId,
         password: password,
-        draw_order: drawCodeVal ? parseInt(drawCodeVal.replace(/\D/g, ''), 10) || null : null,
+        assigned_group: assignedGroup,
+        draw_order: drawOrder,
         draw_code: drawCodeVal || null,
-        draw_time: drawCodeVal ? new Date().toISOString() : null,
+        draw_time: drawOrder ? new Date().toISOString() : null,
       });
     });
 
@@ -153,8 +178,7 @@ export async function parseExcelFile(file: File): Promise<{
 }
 
 /**
- * Export projects to Excel with exact columns:
- * 序號 學制 系所 班級 指導老師 領域 編號 專題名稱 組長學號 +編號(抽籤後)
+ * Export roster and draw results with the same session labels as the admin page.
  */
 export function createExportWorkbook(projects: ProjectItem[]): XLSX.WorkBook {
   // Draw identifiers sort naturally (A02 before A10); undrawn projects follow last.
@@ -176,14 +200,16 @@ export function createExportWorkbook(projects: ProjectItem[]): XLSX.WorkBook {
       '班級': p.class_name,
       '指導老師': p.advisor,
       '領域': p.field,
-      '編號': p.original_code,
+      '原始編號': p.original_code,
       '專題名稱': p.project_title,
       '組長學號': p.leader_id,
-      '+編號(抽籤後)': p.draw_code || (p.draw_order ? `第 ${p.draw_order} 組` : '未抽籤'),
+      '抽籤編號': p.draw_code || (p.draw_order ? '編號尚未提供' : '未抽籤'),
+      '報告場次': p.assigned_group ? formatSessionLabel(p.assigned_group) : '待分配',
+      '組內順序': p.draw_order || '待抽籤',
     };
   });
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const worksheet = XLSX.utils.json_to_sheet(rows, { header: REQUIRED_OUTPUT_HEADERS });
 
   // Set column widths for better readability
   worksheet['!cols'] = [
@@ -196,10 +222,13 @@ export function createExportWorkbook(projects: ProjectItem[]): XLSX.WorkBook {
     { wch: 12 }, // 編號
     { wch: 45 }, // 專題名稱
     { wch: 14 }, // 組長學號
-    { wch: 18 }, // +編號(抽籤後)
+    { wch: 18 }, // 抽籤編號
+    { wch: 18 }, // 報告場次
+    { wch: 12 }, // 組內順序
   ];
 
   const workbook = XLSX.utils.book_new();
+  worksheet['!autofilter'] = { ref: worksheet['!ref'] || 'A1:L1' };
   XLSX.utils.book_append_sheet(workbook, worksheet, '專題抽籤順序表');
 
   return workbook;
@@ -207,7 +236,7 @@ export function createExportWorkbook(projects: ProjectItem[]): XLSX.WorkBook {
 
 export function exportToExcel(projects: ProjectItem[], filenamePrefix = '台中科技大學專題展報告抽籤結果'): void {
   const workbook = createExportWorkbook(projects);
-  const nowStr = new Date().toISOString().slice(0, 10);
+  const nowStr = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Taipei' }).format(new Date());
   const fullFileName = `${filenamePrefix}_${nowStr}.xlsx`;
   XLSX.writeFile(workbook, fullFileName);
 }
@@ -215,40 +244,30 @@ export function exportToExcel(projects: ProjectItem[], filenamePrefix = '台中�
 /**
  * Generate and download an empty or template input Excel file
  */
-export function downloadInputTemplate(): void {
-  const templateRows = [
-    {
-      '序號': '1',
-      '學制': '日間部四技',
-      '系所': '資訊管理系',
-      '班級': '資管四甲',
-      '指導老師': '王教授',
-      '領域': '智慧運算創新應用',
-      '編號': 'E01',
-      '專題名稱': '基於生成式AI之智慧排程平台',
-      '組長學號': '110214101',
-      '組長密碼': '',
-    },
-    {
-      '序號': '2',
-      '學制': '日間部四技',
-      '系所': '資訊工程系',
-      '班級': '資工四乙',
-      '指導老師': '李副教授',
-      '領域': '企業智慧化',
-      '編號': 'A01',
-      '專題名稱': '智慧倉儲即時物聯網監控與調度系統',
-      '組長學號': '110211102',
-      '組長密碼': '',
-    }
-  ];
-
-  const ws = XLSX.utils.json_to_sheet(templateRows);
+export function createInputTemplateWorkbook(configs?: DomainConfig[]): XLSX.WorkBook {
+  const fields = configs ? configs.map(config => config.field).slice(0, 2) : ['智慧運算創新應用', '企業智慧化'];
+  const templateRows = fields.map((field, index) => ({
+    '序號': String(index + 1),
+    '學制': '日間部四技',
+    '系所': index === 0 ? '資訊管理系' : '資訊工程系',
+    '班級': index === 0 ? '資管四甲' : '資工四乙',
+    '指導老師': index === 0 ? '王教授' : '李副教授',
+    '領域': field,
+    '原始編號': getDomainCode(field) ? `${getDomainCode(field)}01` : '',
+    '專題名稱': index === 0 ? '基於生成式AI之智慧排程平台' : '智慧倉儲即時物聯網監控與調度系統',
+    '組長學號': index === 0 ? '110214101' : '110211102',
+    '組長密碼': '',
+  }));
+  const ws = XLSX.utils.json_to_sheet(templateRows, { header: REQUIRED_INPUT_HEADERS });
   ws['!cols'] = [
     { wch: 8 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 15 },
-    { wch: 20 }, { wch: 12 }, { wch: 40 }, { wch: 14 }, { wch: 12 }
+    { wch: 32 }, { wch: 14 }, { wch: 45 }, { wch: 14 }, { wch: 16 }
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '專題匯入範本');
-  XLSX.writeFile(wb, '台中科技大學專題名冊匯入範本.xlsx');
+  return wb;
+}
+
+export function downloadInputTemplate(configs?: DomainConfig[]): void {
+  XLSX.writeFile(createInputTemplateWorkbook(configs), '台中科技大學專題名冊匯入範本.xlsx');
 }

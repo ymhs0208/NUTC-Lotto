@@ -64,7 +64,7 @@ test('all seven domains have unique compact codes across groups and keep local p
   });
   const workbook = createExportWorkbook(updatedProjects);
   const rows = XLSX.utils.sheet_to_json<Record<string, string>>(workbook.Sheets[workbook.SheetNames[0]]);
-  assert.deepEqual(new Set(rows.map(row => row['+編號(抽籤後)'])), new Set(updatedProjects.map(p => p.draw_code)));
+  assert.deepEqual(new Set(rows.map(row => row['抽籤編號'])), new Set(updatedProjects.map(p => p.draw_code)));
 });
 
 test('domain labels tolerate supplied prefixes and punctuation; numbering does not wrap at 99', () => {

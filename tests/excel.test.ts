@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
-import { parseExcelFile, createExportWorkbook, REQUIRED_OUTPUT_HEADERS } from '../src/lib/excel';
+import { parseExcelFile, createExportWorkbook, createInputTemplateWorkbook, REQUIRED_INPUT_HEADERS, REQUIRED_OUTPUT_HEADERS } from '../src/lib/excel';
 import { preserveImportedProjectIds } from '../src/lib/importProjects';
 
 const row = { 序號: '1', 學制: '四技', 系所: '資管', 班級: '甲', 指導老師: '王教授', 領域: '企業智慧化', 編號: 'P1', 專題名稱: '中文測試', 組長學號: '12345678', 組長密碼: 'Strong-password-123' };
@@ -21,7 +21,7 @@ test('patched SheetJS imports Chinese rosters and exports without credential fie
   const rows = XLSX.utils.sheet_to_json<Record<string, string>>(readback.Sheets[readback.SheetNames[0]]);
   assert.deepEqual(Object.keys(rows[0]), REQUIRED_OUTPUT_HEADERS);
   assert.equal(rows[0].專題名稱, '中文測試'); assert.equal(rows[0].組長密碼, undefined);
-  assert.equal(rows[0].編號, 'A01');
+  assert.equal(rows[0].原始編號, 'A01');
   assert.equal(rows[0].password_hash, undefined);
 });
 test('imports never invent predictable passwords and reject weak passwords or excessive files', async () => {
@@ -58,8 +58,8 @@ test('exported file follows numeric draw codes across domains and places undrawn
   const bytes = XLSX.write(createExportWorkbook(projects), { type: 'array', bookType: 'xlsx' });
   const workbook = XLSX.read(bytes, { type: 'array' });
   const exported = XLSX.utils.sheet_to_json<Record<string, string>>(workbook.Sheets[workbook.SheetNames[0]]);
-  assert.deepEqual(exported.map(p => p['+編號(抽籤後)']), ['A01', 'A02', 'A03', 'A10', 'A99', 'A100', 'B01', 'B02', 'B03', 'C01', 'Z01', '未抽籤', '未抽籤', '未抽籤']);
-  assert.deepEqual(exported.slice(-3).map(p => p.編號), ['P1', 'P2', 'P3']);
+  assert.deepEqual(exported.map(p => p['抽籤編號']), ['A01', 'A02', 'A03', 'A10', 'A99', 'A100', 'B01', 'B02', 'B03', 'C01', 'Z01', '未抽籤', '未抽籤', '未抽籤']);
+  assert.deepEqual(exported.slice(-3).map(p => p.原始編號), ['P1', 'P2', 'P3']);
   assert.deepEqual(projects, before);
 });
 
@@ -75,4 +75,66 @@ test('equal draw codes and all-undrawn rosters retain deterministic original-cod
     const rows = XLSX.utils.sheet_to_json<Record<string, string>>(workbook.Sheets[workbook.SheetNames[0]]);
     assert.deepEqual(rows.map(p => p.序號), ['1', '2', '10']);
   }
+});
+
+test('template uses current configured fields, preserves blank passwords and imports new and legacy original-code headers', async () => {
+  const configs = [{ id: 'd1', field: '進修部', drawPrefix: 'Z', groupCount: 2 }, { id: 'd2', field: '自訂領域', groupCount: 1 }];
+  const workbook = createInputTemplateWorkbook(configs);
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { defval: '' });
+  assert.deepEqual(Object.keys(rows[0]), REQUIRED_INPUT_HEADERS);
+  assert.deepEqual(rows.map(row => row.領域), ['進修部', '自訂領域']);
+  // Custom draw prefixes do not change the existing backend's original-code rules.
+  assert.equal(rows[0].原始編號, 'G01');
+  assert.equal(rows[1].原始編號, '');
+  assert.ok(rows.every(row => row.組長密碼 === ''));
+  const imported = await parseExcelFile(new File([XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })], '範本.xlsx'));
+  assert.equal(imported.success, true);
+  assert.deepEqual(imported.projects!.map(project => project.field), rows.map(row => row.領域));
+  assert.equal(imported.projects![0].original_code, 'G01');
+  const empty = createInputTemplateWorkbook([]);
+  assert.deepEqual(XLSX.utils.sheet_to_json(empty.Sheets[empty.SheetNames[0]], { header: 1 })[0], REQUIRED_INPUT_HEADERS);
+});
+
+test('export and reimport retain actual session and within-session order instead of deriving order from draw code', async () => {
+  const base = (await parseExcelFile(makeFile([row]))).projects![0];
+  const projects = [
+    { ...base, id: 'drawn', assigned_group: 2, draw_order: 2, draw_code: 'A32' },
+    { ...base, id: 'undrawn', leader_id: 'other-leader', original_code: 'A02', assigned_group: null, draw_order: null, draw_code: null },
+  ];
+  const workbook = createExportWorkbook(projects);
+  const bytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+  const sheet = XLSX.read(bytes, { type: 'array' });
+  const exported = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet.Sheets[sheet.SheetNames[0]], { defval: '' });
+  assert.equal(exported[0].抽籤編號, 'A32');
+  assert.equal(exported[0].報告場次, '第二場次');
+  assert.equal(exported[0].組內順序, 2);
+  assert.equal(exported[1].抽籤編號, '未抽籤');
+  assert.equal(exported[1].報告場次, '待分配');
+  assert.equal(exported[1].組內順序, '待抽籤');
+  const parsed = await parseExcelFile(new File([bytes], '結果.xlsx'));
+  assert.equal(parsed.success, true);
+  assert.equal(parsed.projects![0].assigned_group, 2);
+  assert.equal(parsed.projects![0].draw_order, 2);
+  assert.equal(parsed.projects![0].draw_code, 'A32');
+  assert.equal(parsed.projects![1].assigned_group, null);
+  assert.equal(parsed.projects![1].draw_order, null);
+  assert.equal(parsed.projects![1].draw_code, null);
+  assert.ok(parsed.projects!.every(project => !project.password));
+  const empty = createExportWorkbook([]);
+  assert.deepEqual(XLSX.utils.sheet_to_json(empty.Sheets[empty.SheetNames[0]], { header: 1 })[0], REQUIRED_OUTPUT_HEADERS);
+});
+
+test('legacy draw headers remain readable and malformed session/order values fail before import', async () => {
+  const legacy = await parseExcelFile(makeFile([{ ...row, '+編號(抽籤後)': 'A03' }]));
+  assert.equal(legacy.success, true);
+  assert.equal(legacy.projects![0].draw_code, 'A03');
+  assert.equal(legacy.projects![0].draw_order, 3);
+  const undrawn = await parseExcelFile(makeFile([{ ...row, '+編號(抽籤後)': '未抽籤' }]));
+  assert.equal(undrawn.projects![0].draw_code, null);
+  for (const labels of [
+    { 報告場次: '第51場次', 組內順序: '1' },
+    { 報告場次: '第一場次', 組內順序: '0' },
+    { 報告場次: '第一場次', 組內順序: '2.5' },
+  ]) assert.equal((await parseExcelFile(makeFile([{ ...row, ...labels, 抽籤編號: 'A01' }]))).success, false);
 });
