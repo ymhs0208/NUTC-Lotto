@@ -79,7 +79,7 @@ export function loginLimiter(scope: 'staff' | 'student', accountLimit = 10, ipLi
   }, windowMs, '登入嘗試過於頻繁，請稍後再試。');
 }
 
-export function anonymousLimiter(scope: 'health', ipLimit: number, globalLimit: number) {
+export function anonymousLimiter(scope: 'health' | 'results', ipLimit: number, globalLimit: number) {
   return limited(req => [
     { key: `public:${scope}:ip:${fingerprint(clientIp(req))}`, limit: ipLimit },
     { key: `public:${scope}:global`, limit: globalLimit },

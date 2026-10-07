@@ -1,5 +1,5 @@
 .pup-lottery-story {
-  width: min(100%, 720px);
+  width: min(100%, 1000px);
   margin: 16px auto 0;
   border-radius: 16px;
   overflow: hidden;
@@ -31,7 +31,7 @@
 .pup-lottery-story canvas {
   display: block;
   width: 100%;
-  height: 240px;
+  height: 340px;
 }
 .pup-lottery-footer {
   display: flex;
@@ -73,8 +73,38 @@
 .pup-lottery-egg-found {
   color: #2563eb;
 }
+/* Use the available fullscreen height without pushing the controls off screen. */
+.stage-presentation-animation {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.stage-presentation-animation .pup-lottery-story {
+  width: min(100%, 1120px);
+  flex: 1;
+  min-height: 0;
+  max-height: 680px;
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+}
+.stage-presentation-animation .pup-lottery-caption {
+  flex-shrink: 0;
+}
+.stage-presentation-animation .pup-lottery-caption h2 {
+  font-size: clamp(20px, 2.3vw, 30px);
+}
+.stage-presentation-animation .pup-lottery-caption p {
+  font-size: 14px;
+}
 .stage-presentation-animation .pup-lottery-story canvas {
-  height: clamp(160px, 30vh, 360px);
+  flex: 1;
+  min-height: 0;
+  height: 0;
+  max-height: 480px;
+}
+.stage-presentation-animation .pup-lottery-footer {
+  flex-shrink: 0;
 }
 @media (max-width: 480px) {
   .pup-lottery-caption {
@@ -98,15 +128,47 @@
     height: 44px;
   }
 }
+/* Fit the entire story into the stage on short fullscreen displays. */
 @media (max-height: 600px) {
+  .stage-presentation-animation {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .stage-presentation-animation .pup-lottery-story {
+    flex: 1;
+    min-height: 0;
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+  }
   .stage-presentation-animation .pup-lottery-caption {
-    padding-top: 10px;
-    min-height: 85px;
+    flex-shrink: 0;
+    min-height: 0;
+    padding: 4px 10px 0;
+  }
+  .stage-presentation-animation .pup-lottery-caption h2 {
+    font-size: 16px;
+    line-height: 1.2;
+    margin: 3px 0;
+  }
+  .stage-presentation-animation .pup-lottery-caption p {
+    font-size: 10px;
+    line-height: 1.3;
   }
   .stage-presentation-animation .pup-lottery-story canvas {
-    height: 140px;
+    flex: 1;
+    height: 0;
+    min-height: 70px;
   }
   .stage-presentation-animation .pup-lottery-footer {
-    padding-bottom: 5px;
+    flex-shrink: 0;
+    min-height: 28px;
+    padding: 0 10px;
+  }
+  .stage-presentation-animation .pup-lottery-corner button {
+    width: 28px;
+    height: 28px;
+    padding: 4px;
   }
 }

@@ -143,3 +143,21 @@ test('SQLite joins only session owner, excludes revoked/expired sessions and cle
     await call('deleteSession', { scope: 'student', tokenHash: 'active' }); assert.equal((await call('studentLookup', { tokenHash: 'active' })).data, null);
   } finally { sqlite.close(); }
 });
+
+test('public results reads all 2000 rows in report order and never returns private document fields', async () => {
+  const { sqlite, call } = database();
+  try {
+    const domain = '企業智慧化';
+    const rows = Array.from({ length: 2000 }, (_, i) => ({ ...project(String(i)), assigned_group: i < 1000 ? 1 : 2, draw_order: i % 1000 + 1, draw_code: `A${i + 1}` }));
+    const saved = await call('save', { state: { projects: rows.reverse(), domainConfigs: [{ id: 'd1', field: domain, groupCount: 2 }] }, expectedVersion: 0 });
+    assert.equal(saved.status, 200);
+    const result = await call('publicResults', { field: domain });
+    assert.equal(result.status, 200);
+    assert.equal(result.data.results.length, 2000);
+    assert.deepEqual(result.data.results[0], { draw_code: 'A1', assigned_group: 1, project_title: '專題 0' });
+    assert.deepEqual(result.data.results[1999], { draw_code: 'A2000', assigned_group: 2, project_title: '專題 1999' });
+    assert.equal(result.data.version, saved.data.version);
+    assert.deepEqual((await call('publicResults', { field: "' OR 1=1 --" })).data.results, []);
+    assert.equal((await call('publicResults', { field: [] })).status, 400);
+  } finally { sqlite.close(); }
+});

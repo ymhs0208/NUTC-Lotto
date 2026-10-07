@@ -1,5 +1,5 @@
 import { runtimeEnv } from './runtime';
-import type { DomainConfig, ProjectItem } from '../src/types';
+import type { DomainConfig, ProjectItem, PublicResultsResponse } from '../src/types';
 import type { StoredProject } from './credentials';
 import type { StaffAccount, StaffSession, StudentSession } from './cloudflareDatabase';
 import { normalizeProfessorName } from '../src/lib/lottery';
@@ -35,6 +35,7 @@ export function createStore() {
     }
   }
   return {
+    publicResults: (field: string) => call<PublicResultsResponse>('publicResults', { field }),
     load: () => call<DatabaseState>('load'),
     health: async () => { if (!await call<boolean>('health')) throw new ApiError(503, '資料庫暫時無法使用。'); },
     findProject: (key: 'id' | 'leader_key', value: string) => call<StoredProject | null>('findProject', { key, value }),

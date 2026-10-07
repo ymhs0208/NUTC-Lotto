@@ -1,3 +1,4 @@
+import { formatSessionLabel } from '../lib/sessionLabel';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ProjectItem, DomainConfig } from '../types';
 import { isRequestCancelled, StoreState } from '../lib/api';
@@ -54,14 +55,12 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
   const selectedField = selectedFields === null ? 'ALL' : selectedFields.join('、');
   const includesField = (field: string) => selectedFields === null || selectedFields.includes(field);
   const changeFields = (fields: string[] | null) => { setSelectedFields(fields); setBatchDrawSummary(null); setBoardDomainFilter('ALL'); };
+  const [showDrawAnimation, setShowDrawAnimation] = useState(false);
   const [animationDuration, setAnimationDuration] = useState(9000);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [autoCarousel, setAutoCarousel] = useState(true);
   const [carouselScope, setCarouselScope] = useState<string | string[] | null>(null);
   const fullscreenRef = useRef(false);
-  const autoCarouselRef = useRef(true);
-  autoCarouselRef.current = autoCarousel;
 
   const [batchDrawSummary, setBatchDrawSummary] = useState<string | null>(null);
 
@@ -81,14 +80,16 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
 
   // Filter projects based on selected field
   const currentPool = projects.filter(p => includesField(p.field));
-  const visibleDomainConfigs = domainConfigs.filter((cfg) =>
-    includesField(cfg.field) && currentPool.some((p) => p.field === cfg.field)
-  );
-
   const undrawnPool = currentPool.filter((p) => !p.draw_order);
   const drawFields = getDrawableFields(domainConfigs.filter(cfg => includesField(cfg.field)).map(cfg => cfg.field), projects);
   const drawablePool = undrawnPool.filter(project => drawFields.includes(project.field));
+  const visibleDomainConfigs = domainConfigs.filter(cfg =>
+    (drawablePool.length ? drawFields.includes(cfg.field) : includesField(cfg.field)) && currentPool.some(p => p.field === cfg.field)
+  );
   const completedFields = domainConfigs.filter(cfg => projects.some(project => project.field === cfg.field && !!project.draw_order)).map(cfg => cfg.field);
+  const resettableFields = completedFields;
+  const selectedResetFields = resetFields.filter(field => completedFields.includes(field));
+  const resetProjectCount = projects.filter(project => selectedResetFields.includes(project.field)).length;
   const drawnPool = currentPool
     .filter((p) => !!p.draw_order)
     .sort((a, b) => {
@@ -185,7 +186,9 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
     if (dataVersion === null) { setNoticeMessage('資料尚未載入，請重新整理後再試。'); return; }
 
     const duration = pupLotteryDuration();
-    const revealReady = new Promise<void>((resolve) => { animationReveal.current = resolve; });
+    const revealReady = showDrawAnimation
+      ? new Promise<void>((resolve) => { animationReveal.current = resolve; })
+      : Promise.resolve();
     setAnimationDuration(duration);
     setIsAnimating(true);
     setBatchDrawSummary(null);
@@ -208,8 +211,8 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
       );
       onApplyState(backendResult);
       triggerCelebration();
-      if (fullscreenRef.current && autoCarouselRef.current) {
-        setCarouselScope(selectedFields === null ? 'ALL' : [...selectedFields]);
+      if (fullscreenRef.current) {
+        setCarouselScope([...drawFields]);
       }
     } catch (apiErr) {
       if (!isRequestCancelled(apiErr)) setNoticeMessage(apiErr instanceof Error ? apiErr.message : '抽籤失敗，請重新整理後再試。');
@@ -227,8 +230,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
       setNoticeMessage('目前尚無任何已抽籤的領域。');
       return;
     }
-    const inScope = completedFields.filter(includesField);
-    setResetFields(inScope.length ? inScope : completedFields);
+    setResetFields([]);
     setIsResetModalOpen(true);
   };
 
@@ -266,12 +268,12 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
       <div hidden={carouselScope !== null} className={isFullscreen ? 'stage-fullscreen-layout' : 'space-y-5 sm:space-y-7'}>
       {isFullscreen && <header className="stage-presentation-header">
         <div className="stage-presentation-brand">
-          <img className="stage-presentation-logo" src="/android-chrome-512x512.png" alt="國立臺中科技大學專題成果展" width={48} height={48} />
+          <img className="stage-presentation-logo" src="/college-logo-64.webp" srcSet="/college-logo-64.webp 1x, /college-logo-128.webp 2x" alt="專題報告抽籤系統圖標" width={56} height={56} />
           <div><p>國立臺中科技大學 · 資訊與流通學院</p><h1>專題報告抽籤現場</h1></div>
         </div>
         <div className="stage-presentation-tools">
           <DomainScopePicker domains={domainConfigs} projects={projects} selected={selectedFields} disabled={isAnimating || isResetting} onChange={changeFields} />
-          <button type="button" onClick={handleOpenResetModal} disabled={isAnimating || isResetting || completedFields.length === 0} aria-label="重設結果"><RotateCcw size={18} /></button>
+          <button type="button" onClick={handleOpenResetModal} disabled={isAnimating || isResetting || resettableFields.length === 0} aria-label="選擇要重設的領域"><RotateCcw size={18} /></button>
           <button type="button" onClick={toggleFullscreen} aria-label="退出全螢幕"><Minimize2 size={18} /><span>退出全螢幕</span></button>
         </div>
       </header>}
@@ -286,12 +288,12 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
             <div className="flex items-center gap-4 min-w-0">
               <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl border border-slate-100 bg-white flex items-center justify-center shrink-0 p-2 shadow-sm">
-                <img src="/android-chrome-512x512.png" alt="國立臺中科技大學 資訊與流通學院" className="max-h-full max-w-full object-contain" />
+                <img width={64} height={64} src="/college-logo-64.webp" srcSet="/college-logo-64.webp 1x, /college-logo-128.webp 2x" alt="國立臺中科技大學 資訊與流通學院" className="max-h-full max-w-full object-contain" />
               </div>
               <div className="min-w-0">
                 <p className="text-[11px] sm:text-xs font-semibold tracking-wide text-blue-700">國立臺中科技大學 · 資訊與流通學院</p>
                 <h1 className="mt-1 text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight">專題報告抽籤現場</h1>
-                <p className="mt-1 text-xs sm:text-sm text-slate-600">各領域獨立分組，現場同步公布發表順位</p>
+                <p className="mt-1 text-xs sm:text-sm text-slate-600">各領域獨立分組，現場同步公布編號</p>
               </div>
             </div>
           </div>
@@ -306,7 +308,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                 {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                 {isFullscreen ? '退出全螢幕' : '全螢幕展示'}
               </button>
-              <button onClick={handleOpenResetModal} disabled={isAnimating || isResetting || completedFields.length === 0} type="button" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 px-4 py-3 text-sm font-bold text-slate-700 hover:text-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" title="選擇領域並重設抽籤結果">
+              <button onClick={handleOpenResetModal} disabled={isAnimating || isResetting || resettableFields.length === 0} type="button" className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 px-4 py-3 text-sm font-bold text-slate-700 hover:text-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer" title="選擇要重設的抽籤領域">
                 <RotateCcw className="w-4 h-4" />
                 <span className="hidden sm:inline">重設結果</span>
               </button>
@@ -329,7 +331,12 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
           {isAnimating ? (
             <div className={`${isFullscreen ? 'stage-presentation-animation' : ''} w-full py-3 sm:py-5`}>
               <p className="text-sm font-bold tracking-wide text-blue-700">{selectedField === 'ALL' ? '全校各領域' : selectedField} · 現場抽籤中</p>
-              <PupLotteryAnimation duration={animationDuration} onReveal={handleAnimationReveal} />
+              {showDrawAnimation
+                ? <PupLotteryAnimation duration={animationDuration} onReveal={handleAnimationReveal} />
+                : <div className="flex flex-col items-center gap-3 py-10" role="status">
+                    <div className="h-10 w-10 rounded-full border-4 border-blue-100 border-t-blue-700 animate-spin" aria-hidden="true" />
+                    <span className="text-base font-bold text-slate-600">正在產生抽籤結果…</span>
+                  </div>}
             </div>
           ) : isFullscreen ? (
             <div className="stage-presentation-ready">
@@ -337,7 +344,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                 <div className="stage-presentation-intro">
                   <div className="stage-presentation-title">
                     <p className="stage-presentation-scope">{selectedField === 'ALL' ? '全校各領域' : selectedFields?.length === 0 ? '尚未選擇領域' : selectedFields?.length === 1 ? selectedField : `本次已選 ${selectedFields?.length} 個領域`}</p>
-                    <h2>{currentPool.length === 0 ? selectedFields?.length === 0 ? '請勾選抽籤領域' : '尚無專題資料' : undrawnPool.length ? '準備開始抽籤' : '報告場次與順位已排定'}</h2>
+                    <h2>{currentPool.length === 0 ? selectedFields?.length === 0 ? '請勾選抽籤領域' : '尚無專題資料' : undrawnPool.length ? '準備開始抽籤' : '報告場次與編號已排定'}</h2>
                   </div>
                 </div>
                 <div className="stage-presentation-counts" role="group" aria-label="本次抽籤數量">
@@ -363,7 +370,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                       {selectedField === 'ALL' ? '全校各領域抽籤完成' : `「${selectedField}」領域抽籤完成`}
                     </p>
                     <h2 className="mt-1 text-2xl font-black leading-tight tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">
-                      報告場次與順位已排定
+                      報告場次與編號已排定
                     </h2>
                     <p className="mt-3 text-sm font-medium text-slate-600 sm:text-base">{batchDrawSummary}</p>
                   </div>
@@ -415,7 +422,8 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
              * ======================================================== */
             <div className="w-full max-w-6xl mx-auto text-left">
               <div className="flex flex-col gap-5 rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-slate-50 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between lg:p-8">
-                <div className="min-w-0">
+                <div className="flex items-start gap-4 sm:gap-5">
+                  <div>
                     <p className="text-sm font-bold text-blue-800 sm:text-base">專題報告抽籤</p>
                     <h2 className="mt-1 text-2xl font-black leading-tight tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">
                       {currentPool.length === 0 ? selectedFields?.length === 0 ? '請勾選抽籤領域' : '此範圍尚無專題' : undrawnPool.length === 0 ? '此範圍已完成抽籤' : '準備開始抽籤'}
@@ -424,9 +432,10 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                       {currentPool.length === 0
                         ? selectedFields?.length === 0 ? '請從抽籤範圍選擇至少一個領域。' : '請先在管理後台匯入專題資料，完成後即可在此進行抽籤。'
                         : undrawnPool.length === 0
-                        ? '場次與報告順位已排定，請查看下方結果看板。'
+                        ? '場次與編號已排定，請查看下方結果看板。'
                         : '各領域依設定組數獨立分組，並排定各組的報告順序。'}
                     </p>
+                  </div>
                 </div>
                 {currentPool.length > 0 && (
                   <div className="grid shrink-0 grid-cols-2 gap-4 rounded-2xl border border-blue-200 bg-white/90 px-5 py-3 shadow-sm lg:px-6 lg:py-4">
@@ -477,16 +486,16 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
           >
             <Zap className="w-5 h-5 fill-current shrink-0 animate-pulse" />
             <span>
-              {selectedField === 'ALL'
+              {selectedField === 'ALL' && drawFields.length === domainConfigs.length
                 ? '開始全校抽籤'
-                : selectedFields?.length === 1 ? `開始「${selectedField}」抽籤` : `開始抽籤（${selectedFields?.length || 0} 個領域）`}
+                : drawFields.length === 1 ? `開始「${drawFields[0]}」抽籤` : `開始抽籤（${drawFields.length} 個領域）`}
             </span>
           </button>}
           {isFullscreen && drawnPool.length > 0 && !isAnimating && <button type="button" onClick={openCarousel} className="stage-presentation-play"><Play size={22} />輪播結果</button>}
           </div>
           <label className="flex items-center gap-2 text-sm font-semibold text-slate-600 cursor-pointer">
-            <input type="checkbox" checked={autoCarousel} onChange={(event) => setAutoCarousel(event.target.checked)} className="h-4 w-4 accent-blue-700" />
-            全螢幕展示時，抽籤完成自動輪播結果
+            <input type="checkbox" checked={showDrawAnimation} disabled={isAnimating} onChange={(event) => setShowDrawAnimation(event.target.checked)} className="h-4 w-4 accent-blue-700" />
+            播放抽籤動畫
           </label>
         </div>
       </section>
@@ -508,11 +517,11 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                 <span>分組與報告順序</span>
               </h3>
               <p className="mt-1 text-sm text-slate-600 sm:text-base">
-                依領域與場次排列；各組報告順位由第一位起算
+                依領域與場次排列；編號於各領域內跨組連續編號
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={openCarousel} disabled={isAnimating || drawnPool.length === 0}
+            <button type="button" onClick={openCarousel} disabled={isAnimating || isResetting || drawnPool.length === 0}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-40 cursor-pointer">
               <Play className="h-4 w-4" />輪播結果
             </button>
@@ -689,10 +698,10 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                                 </span>
                                 <div>
                                   <div className="text-lg sm:text-xl font-black text-slate-900">
-                                    第 {g} 組報告場次
+                                    {formatSessionLabel(g)}
                                   </div>
                                   <div className="text-sm text-slate-600 font-mono">
-                                    發表順位 01 ~ {String(groupItems.length).padStart(2, '0')}
+                                    編號 {groupItems.length ? `${groupItems[0].draw_code || '編號未設定'} ~ ${groupItems[groupItems.length - 1].draw_code || '編號未設定'}` : '尚無資料'}
                                   </div>
                                 </div>
                               </div>
@@ -714,34 +723,31 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                                   return (
                                     <div
                                       key={item.id}
-                                      className={`p-4 sm:p-5 rounded-xl border transition-all text-left flex items-start gap-4 ${
+                                      className={`p-4 sm:p-5 rounded-xl border transition-all text-left flex items-center gap-4 ${
                                         matched
                                           ? 'bg-blue-50/90 border-blue-400 ring-2 ring-blue-300 shadow-md scale-[1.01]'
                                           : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-xs'
                                       }`}
                                     >
-                                      {/* Large Unmistakable Sequence Badge */}
-                                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl text-white flex flex-col items-center justify-center shrink-0 shadow-xs bg-rose-700">
+                                      {/* Prominent draw code badge */}
+                                      <div className="min-w-24 min-h-20 px-3 py-4 rounded-xl text-white flex flex-col items-center justify-center shrink-0 shadow-xs bg-rose-700">
                                         <span className="text-xs font-semibold tracking-wider leading-none">
-                                          順位
+                                          編號
                                         </span>
                                         <span className="text-2xl sm:text-3xl font-black font-mono leading-none mt-1">
-                                          {String(item.draw_order).padStart(2, '0')}
+                                          {item.draw_code || '編號未設定'}
                                         </span>
                                       </div>
 
                                       {/* Project Details */}
                                       <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-                                          <span className="max-w-full break-all text-xs sm:text-sm font-bold font-mono text-rose-800 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                            {item.draw_code}
-                                          </span>
-                                          {matched && (
+                                        {matched && (
+                                          <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
                                             <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.2 rounded animate-pulse">
                                               搜尋結果
                                             </span>
-                                          )}
-                                        </div>
+                                          </div>
+                                        )}
 
                                         <h5
                                           className="text-lg sm:text-xl lg:text-2xl font-bold text-slate-950 leading-snug break-words"
@@ -766,9 +772,8 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                       <table className="w-full text-left text-xs sm:text-sm min-w-[500px]">
                         <thead>
                           <tr className="bg-blue-50 text-blue-950 text-xs font-semibold border-b border-blue-200">
-                            <th className="py-2.5 px-3 whitespace-nowrap">報告順位</th>
+                            <th className="py-2.5 px-3 whitespace-nowrap">編號</th>
                             <th className="py-2.5 px-3 whitespace-nowrap">分組場次</th>
-                            <th className="py-2.5 px-3 whitespace-nowrap">抽籤編號</th>
                             <th className="py-2.5 px-3">專題名稱</th>
                           </tr>
                         </thead>
@@ -793,16 +798,13 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                                 >
                                   <td className="py-2.5 px-3 whitespace-nowrap">
                                     <span className="font-mono font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                      第 {String(item.draw_order).padStart(2, '0')} 位
+                                      {item.draw_code || '編號未設定'}
                                     </span>
                                   </td>
                                   <td className="py-2.5 px-3 whitespace-nowrap font-mono text-xs">
                                     <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                                      第 {item.assigned_group} 組
+                                      {formatSessionLabel(item.assigned_group!)}
                                     </span>
-                                  </td>
-                                  <td className="py-2.5 px-3 whitespace-nowrap font-mono text-xs font-bold text-slate-800">
-                                    {item.draw_code}
                                   </td>
                                   <td className="py-2.5 px-3 max-w-xs sm:max-w-md truncate font-medium">
                                     {item.project_title}
@@ -864,7 +866,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                   <strong>各領域獨立排序</strong>：每個領域依其設定的「分組組數」分別獨立產生順序（例如：第 1 組、第 2 組等各自從順序 01 起跳）。
                 </li>
                 <li>
-                  <strong>抽籤後編號</strong>：A 企業智慧化、B 數位內容與多媒體應用、C 網路應用與資通安全、D 嵌入式系統與行動計算、E 智慧運算創新應用、F 智慧流通應用與研究、G 進修部。各領域從 01 連續編號，跨組不重複，例如 A01、A02。
+                  <strong>編號</strong>：A 企業智慧化、B 數位內容與多媒體應用、C 網路應用與資通安全、D 嵌入式系統與行動計算、E 智慧運算創新應用、F 智慧流通應用與研究、G 進修部。各領域從 01 連續編號，跨組不重複，例如 A01、A02。
                 </li>
                 {domainConfigs.filter(cfg => drawFields.includes(cfg.field) && cfg.groupCapacities).map(cfg => (
                   <li key={cfg.id}><strong>{cfg.field} 指定件數</strong>：{Array.from({ length: cfg.groupCount }, (_, i) => `第 ${i + 1} 組 ${cfg.groupCapacities![i + 1]} 件`).join('、')}。抽籤將同時遵守指定件數與指導老師迴避。</li>
@@ -894,7 +896,7 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
       {/* Reset Modal */}
       {isResetModalOpen && (
         <div role="dialog" aria-modal="true" aria-label="確認重設抽籤結果" className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-xl space-y-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full max-h-[90dvh] overflow-y-auto p-6 shadow-xl space-y-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
                 <AlertTriangle className="w-5 h-5" />
@@ -902,17 +904,34 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
               <div>
                 <h3 className="text-base font-bold text-slate-900">確定重設抽籤結果？</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  請勾選要重設的領域。所選領域的報告序位將清空，回到未抽籤狀態。
+                  請勾選要重設的領域。所選領域的分組、報告順位及抽籤編號將清除，其他領域保留。
                 </p>
               </div>
             </div>
 
-            <div role="group" aria-label="選擇要重設的領域" className="max-h-60 overflow-y-auto space-y-2">
-              {completedFields.map(field => <label key={field} className="flex items-center gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
-                <input type="checkbox" disabled={isResetting} checked={resetFields.includes(field)} onChange={event => setResetFields(current => event.target.checked ? [...current, field] : current.filter(value => value !== field))} />
-                <span>{field}</span>
-              </label>)}
-            </div>
+            <fieldset disabled={isResetting} className="space-y-3">
+              <legend className="w-full">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="whitespace-nowrap text-xs font-bold text-slate-800 sm:text-sm">重設範圍（可複選）</span>
+                  <span className="flex shrink-0 items-center gap-2 text-xs">
+                    <button type="button" disabled={isResetting} onClick={() => setResetFields([...resettableFields])} className="rounded-lg bg-slate-100 px-2 py-2 font-bold text-slate-700 disabled:opacity-50 sm:px-3">全選</button>
+                    <button type="button" disabled={isResetting} onClick={() => setResetFields([])} className="rounded-lg bg-slate-100 px-2 py-2 font-bold text-slate-700 disabled:opacity-50 sm:px-3">清除</button>
+                  </span>
+                </span>
+              </legend>
+              <div className="max-h-[30dvh] overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
+                {resettableFields.map(field => <label key={field} className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm">
+                  <input type="checkbox" checked={selectedResetFields.includes(field)} onChange={event => {
+                    if (isResetting) return;
+                    const checked = event.target.checked;
+                    setResetFields(current => checked ? [...current.filter(value => value !== field), field] : current.filter(value => value !== field));
+                  }} className="h-4 w-4 shrink-0 accent-rose-600" />
+                  <span className="min-w-0 flex-1 font-semibold text-slate-700">{field}</span>
+                  <small className="shrink-0 text-slate-500">{projects.filter(p => p.field === field).length} 件</small>
+                </label>)}
+              </div>
+              <p role="status" className="text-xs font-semibold text-rose-700">{selectedResetFields.length ? `將重設 ${selectedResetFields.length} 個領域，共 ${resetProjectCount} 件專題。` : '請勾選至少一個領域。'}</p>
+            </fieldset>
             <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 onClick={() => setIsResetModalOpen(false)}
@@ -923,11 +942,11 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
               </button>
               <button
                 onClick={handleConfirmReset}
-                disabled={isResetting || resetFields.length === 0}
+                disabled={isResetting || !selectedResetFields.length}
                 className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-rose-700 disabled:opacity-60 cursor-pointer"
               >
                 {isResetting && <RotateCcw className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-                {isResetting ? '重設中…' : '確定重設清空'}
+                {isResetting ? '重設中…' : `重設所選領域（${selectedResetFields.length}）`}
               </button>
             </div>
           </div>

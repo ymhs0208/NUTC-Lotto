@@ -34,7 +34,7 @@ export function DomainScopePicker({ domains, projects, selected, disabled, onCha
     {open && <div className="domain-scope-options" role="group" aria-label="勾選抽籤領域">
       <div className="domain-scope-heading"><strong>選擇抽籤領域</strong><span>可複選</span><button type="button" aria-label="完成領域選擇" onClick={() => setOpen(false)}><Check size={16} />完成</button></div>
       <div className="domain-scope-shortcuts"><button type="button" disabled={!available.length} onClick={() => onChange(available.length === fields.length ? null : available)}>全選</button><button type="button" onClick={() => onChange([])}>清除</button><span>已選 {checked.length} 個</span></div>
-      <div className="domain-scope-list">{domains.map(domain => <label key={domain.id} className={!available.includes(domain.field) ? 'domain-scope-locked' : undefined}><input type="checkbox" disabled={!available.includes(domain.field)} checked={checked.includes(domain.field)} onChange={event => {
+      <div className="domain-scope-list">{domains.map(domain => <label key={domain.id} aria-disabled={!available.includes(domain.field)}><input type="checkbox" disabled={!available.includes(domain.field)} checked={checked.includes(domain.field)} onChange={event => {
         const next = event.target.checked ? [...checked, domain.field] : checked.filter(field => field !== domain.field);
         onChange(next.length === fields.length ? null : next);
       }} /><span>{domain.field}</span><small>{!available.includes(domain.field) ? '已有結果' : `${projects.filter(project => project.field === domain.field).length} 件`}</small></label>)}</div>

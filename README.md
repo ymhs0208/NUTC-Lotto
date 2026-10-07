@@ -88,3 +88,9 @@ npm run benchmark:student-login -- --students=300
 測試包含 SQLite 交易回復、版本衝突、單筆學生查詢、session 到期清理，以及實際本機 workerd 的登入、角色限制、抽籤、公開資料白名單、密碼輪替與重啟持久性。整合測試與 benchmark 使用暫存的獨立資料庫及合成帳號，不修改正式或開發資料。Benchmark 測量本機 Workers 與 SQLite，不代表正式校園網路容量。
 
 SQLite Durable Objects 的儲存與交易行為可參考 [Cloudflare 官方文件](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/)。
+
+## 各領域結果查詢
+
+免登入開啟 `/results`，或點選頁面頂端「各領域結果」。選擇領域後可查詢已抽籤專題的編號、報告場次與專題名稱；支援卡片／表格切換、每次增加 50 件及手動更新。切換顯示方式使用已載入資料。
+
+唯讀 API：`GET /api/public/results?field=領域名稱`。未指定領域時只取得領域選單；結果依場次與報告順序排列。不回傳組長學號、密碼、評審或未抽籤專題。沿用現有 Cloudflare SQLite 資料庫，不需新增資料庫 migration。

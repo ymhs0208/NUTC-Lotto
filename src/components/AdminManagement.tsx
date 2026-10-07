@@ -1,3 +1,4 @@
+import { formatSessionLabel } from '../lib/sessionLabel';
 import React, { useState, useRef } from 'react';
 import { ProjectItem, DomainStats, DomainConfig } from '../types';
 import { preserveImportedProjectIds } from '../lib/importProjects';
@@ -640,7 +641,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       {/* Page title */}
       <div className="flex items-center gap-3 pb-1">
         <img
-          src="/android-chrome-512x512.png"
+          width={64} height={64} src="/college-logo-64.webp" srcSet="/college-logo-64.webp 1x, /college-logo-128.webp 2x"
           alt="國立臺中科技大學 資訊與流通學院"
           className="h-10 sm:h-11 w-auto object-contain shrink-0"
         />
@@ -872,7 +873,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
         {domainDisplayMode === 'cards' ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {domainStats.map(stat => {
+          {domainStats.map((stat) => {
             const drawnCount = projects.filter((p) => p.field === stat.field && p.draw_order).length;
             const isSelected = selectedFieldFilter === stat.field;
             const cfgObj = domainConfigs.find((c) => c.id === stat.id) || {
@@ -983,7 +984,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           <table className="w-full min-w-[850px] text-left text-xs sm:text-sm border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-xs">
-                <th className="py-2.5 px-4 text-center border border-slate-200 whitespace-nowrap">顯示代碼</th>
+                <th className="py-2.5 px-4 text-center border border-slate-200 whitespace-nowrap">代碼</th>
                 <th className="py-2.5 px-4 border border-slate-200">列標籤 (領域名稱)</th>
                 <th className="py-2.5 px-4 text-center border border-slate-200">件數</th>
                 <th className="py-2.5 px-4 text-center border border-slate-200">
@@ -995,7 +996,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {domainStats.map(stat => {
+              {domainStats.map((stat) => {
                 const drawnCount = projects.filter((p) => p.field === stat.field && p.draw_order).length;
                 const isSelected = selectedFieldFilter === stat.field;
                 const cfgObj = domainConfigs.find((c) => c.id === stat.id) || {
@@ -1330,17 +1331,17 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                           <td className="py-2.5 px-3 whitespace-nowrap font-medium text-slate-800">
                             {p.assigned_group ? (
                               <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-mono text-xs border border-blue-200">
-                                第 {p.assigned_group} 組
+                                {formatSessionLabel(p.assigned_group)}
                               </span>
                             ) : (
                               <span className="text-slate-400 italic text-xs">待分配</span>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 whitespace-nowrap font-mono text-xs tabular-nums">
-                            {p.assigned_group && p.draw_order ? (
-                              <span className="font-semibold text-slate-800">第 {p.draw_order} 位</span>
+                          <td className="py-2.5 px-3 whitespace-nowrap font-medium">
+                            {p.draw_order ? (
+                              <span className="text-slate-800 tabular-nums">第 {p.draw_order} 位</span>
                             ) : (
-                              <span className="text-slate-400">-</span>
+                              <span className="text-slate-400 italic text-xs">待抽籤</span>
                             )}
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap text-xs">

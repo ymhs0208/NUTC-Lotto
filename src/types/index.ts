@@ -35,4 +35,17 @@ export interface DomainConfig {
   evaluatorsPerGroup?: Record<number, string[]>; // 每一個分組 (1..N) 的評分教授清單
 }
 
-export type ViewMode = 'student' | 'stage' | 'admin' | 'logs';
+export type ViewMode = 'student' | 'stage' | 'admin' | 'logs' | 'results';
+
+// Explicit public result contract; no student or staff credentials.
+export interface PublicDrawResult {
+  draw_code: string;
+  assigned_group: number | null;
+  project_title: string;
+}
+
+export interface PublicResultsResponse {
+  domains: string[];
+  results: PublicDrawResult[];
+  version?: number;
+}

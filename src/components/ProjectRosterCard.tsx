@@ -1,3 +1,4 @@
+import { formatSessionLabel } from '../lib/sessionLabel';
 import { Edit, Trash2, AlertTriangle } from 'lucide-react';
 import type { ProjectItem } from '../types';
 import { isAdvisorConflict } from '../lib/lottery';
@@ -37,7 +38,7 @@ export function ProjectRosterCard({ project: p, sharedPasswordEnabled, onEdit, o
           </div>
           <div className="min-w-0">
             <dt className="text-xs text-slate-500">分組場次</dt>
-            <dd className="mt-1 text-sm font-bold text-slate-800">{p.assigned_group ? `第 ${p.assigned_group} 組` : '待分配'}</dd>
+            <dd className="mt-1 text-sm font-bold text-slate-800">{p.assigned_group ? formatSessionLabel(p.assigned_group) : '待分配'}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-xs text-slate-500">組內順序</dt>

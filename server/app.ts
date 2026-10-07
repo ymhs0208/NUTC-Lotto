@@ -119,6 +119,12 @@ function checkVersion(req: Request, state: DatabaseState) {
   if (req.body.version !== state.version) throw new ApiError(409, '資料已由其他人更新，請重新整理後再操作。');
 }
 
+app.get('/api/public/results', anonymousLimiter('results', 3000, 12000), route(async (req, res) => {
+  if (Object.keys(req.query).some(key => key !== 'field')) throw new ApiError(400, '請選擇有效的領域。');
+  const field = req.query.field ?? '';
+  if (typeof field !== 'string' || field.length > 512) throw new ApiError(400, '請選擇有效的領域。');
+  res.json({ success: true, ...await createStore().publicResults(field) });
+}));
 app.get('/api/health', anonymousLimiter('health', 120, 3600), route(async (_req, res) => {
   await createStore().health();
   res.json({ status: 'ok' });
