@@ -36,7 +36,7 @@ export { preserveImportedProjectIds } from './importProjects';
 
 // Helper to normalize header keys (stripping spaces, parentheses differences)
 function normalizeKey(str: string): string {
-  return String(str || '').trim().replace(/\s+/g, '');
+  return String(str || '').normalize('NFKC').trim().replace(/\s+/g, '');
 }
 
 /**
@@ -90,7 +90,8 @@ export async function parseExcelFile(file: File): Promise<{
     // Check if there is already a draw code column in this excel
     const drawCodeKey = findKey('抽籤編號') || findKey('+編號(抽籤後)') || findKey('編號(抽籤後)') || findKey('抽籤後編號') || findKey('抽籤序號');
 
-    const sessionKey = findKey('報告場次') || findKey('分組場次') || findKey('組別');
+    const sessionKeys = ['報告場次', '分組場次', '組別', '場次', '分組']
+      .map(findKey).filter((key): key is string => !!key);
     const orderKey = findKey('組內順序') || findKey('報告順位');
 
     // Validation warning
@@ -124,15 +125,18 @@ export async function parseExcelFile(file: File): Promise<{
         const value = key ? String(row[key] ?? '').normalize('NFKC').replace(/\s+/g, '') : '';
         if (!value || ['未抽籤', '待抽籤', '待分配', '場次尚未提供', '—', '-'].includes(value)) return null;
         if (isSession) {
-          const chinese = Array.from({ length: 50 }, (_, i) => i + 1).find(n => formatSessionLabel(n) === value);
+          const ordinal = value.replace(/^第/, '').replace(/(?:場次|場|組)$/, '');
+          const chinese = Array.from({ length: 50 }, (_, i) => i + 1).find(n => formatSessionLabel(n).slice(1, -2) === ordinal);
           if (chinese) return chinese;
         }
-        const match = value.match(isSession ? /^(?:第)?([1-9]\d*)(?:場次|組)?$/ : /^(?:第)?([1-9]\d*)(?:位)?$/);
+        const match = value.match(isSession ? /^(?:第)?(\d+)(?:場次|場|組)?$/ : /^(?:第)?([1-9]\d*)(?:位)?$/);
         const number = match ? Number(match[1]) : NaN;
         if (!Number.isSafeInteger(number) || number < 1 || (isSession && number > 50)) throw new Error(`第 ${index + 2} 列${isSession ? '報告場次' : '組內順序'}格式不正確。`);
         return number;
       };
-      const assignedGroup = readPosition(sessionKey, true);
+      const sessions = sessionKeys.map(key => readPosition(key, true)).filter((value): value is number => value !== null);
+      if (new Set(sessions).size > 1) throw new Error(`第 ${index + 2} 列的報告場次與分組場次不一致，請確認場次欄位。`);
+      const assignedGroup = sessions[0] ?? null;
       // New exports carry the true within-session position. Legacy files retain
       // their historical fallback only when no explicit order column exists.
       const drawOrder = orderKey ? readPosition(orderKey, false) : drawCodeVal ? parseInt(drawCodeVal.replace(/\D/g, ''), 10) || null : null;

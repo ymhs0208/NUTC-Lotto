@@ -138,3 +138,47 @@ test('legacy draw headers remain readable and malformed session/order values fai
     { 報告場次: '第一場次', 組內順序: '2.5' },
   ]) assert.equal((await parseExcelFile(makeFile([{ ...row, ...labels, 抽籤編號: 'A01' }]))).success, false);
 });
+
+test('imports grouping sessions written as Chinese groups, session labels and full-width numbers', async () => {
+  for (const [value, expected] of [['第一組', 1], ['第二場', 2], ['三', 3], ['第十二組', 12], ['第五十場次', 50], ['第０２組', 2], ['01', 1]] as const) {
+    const parsed = await parseExcelFile(makeFile([{ ...row, 分組場次: value, 組內順序: '1', 抽籤編號: 'A01' }]));
+    assert.equal(parsed.success, true, `${value}: ${parsed.error}`);
+    assert.equal(parsed.projects![0].assigned_group, expected);
+    assert.equal(parsed.projects![0].draw_order, 1);
+  }
+});
+
+test('blank or pending report-session columns do not hide populated grouping-session columns', async () => {
+  for (const blank of ['', '待分配']) {
+    const parsed = await parseExcelFile(makeFile([{ ...row, 報告場次: blank, 分組場次: '第二組' }]));
+    assert.equal(parsed.success, true, parsed.error);
+    assert.equal(parsed.projects![0].assigned_group, 2);
+  }
+  const conflict = await parseExcelFile(makeFile([{ ...row, 報告場次: '第一場次', 分組場次: '第二組' }]));
+  assert.equal(conflict.success, false);
+  assert.match(conflict.error!, /第 2 列.*不一致/);
+  for (const invalid of ['第零組', '第51組', '0', '2.5', '第一組／第二組']) {
+    assert.equal((await parseExcelFile(makeFile([{ ...row, 分組場次: invalid }]))).success, false, invalid);
+  }
+});
+
+test('Chinese grouping sessions survive Excel import, database save and state reload', { timeout: 180000 }, async () => {
+  const { localWorker } = await import('../scripts/local-worker');
+  const { hashPassword } = await import('../server/credentials');
+  const worker = await localWorker();
+  try {
+    const parsed = await parseExcelFile(makeFile([{ ...row, 分組場次: '第一場次', 抽籤編號: 'A01', 組內順序: '1' }]));
+    assert.equal(parsed.success, true, parsed.error);
+    assert.equal(parsed.projects![0].assigned_group, 1);
+    await worker.start();
+    await worker.setup({ action: 'accounts', accounts: [{ id: 'import-admin', email: 'import@example.edu.tw', role: 'admin', password_hash: await hashPassword('Abc12345') }] });
+    const login = await worker.request('/api/auth/verify', { username: 'import@example.edu.tw', password: 'Abc12345', targetView: 'admin' });
+    assert.equal(login.status, 200);
+    const saved = await worker.request('/api/projects', { version: 0, projects: parsed.projects }, login.cookie);
+    assert.equal(saved.status, 200, JSON.stringify(saved.data));
+    const reloaded = await worker.request('/api/state', undefined, login.cookie);
+    assert.equal(reloaded.data.projects[0].assigned_group, 1);
+    assert.equal(reloaded.data.projects[0].draw_order, 1);
+    assert.equal(reloaded.data.projects[0].draw_code, 'A01');
+  } finally { await worker.dispose(); }
+});

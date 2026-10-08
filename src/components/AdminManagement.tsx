@@ -1729,6 +1729,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                   請選擇匯入模式：您可以選擇完全覆蓋現有名單，或是將新名單追加至現有名單之後。
                 </p>
+                <p className="text-xs text-blue-700 mt-2">已讀取分組場次：{pendingImportProjects.filter(project => project.assigned_group != null).length}／{pendingImportProjects.length} 筆。</p>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">「追加」只新增未存在的組長學號，不會更新既有專題的場次。更新既有名冊請使用「完全覆蓋」，並確認 Excel 包含要保留的全部資料。</p>
                 {sharedPasswordEnabled && <p className="text-xs text-indigo-700 mt-2">共用密碼啟用中，匯入檔案內的個別密碼欄位會略過；新專題沿用目前共用密碼。</p>}
                 {projects.some(p => p.draw_order) && <label className="mt-3 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
                   <input type="checkbox" checked={overwriteAcknowledged} onChange={e => setOverwriteAcknowledged(e.target.checked)} className="mt-0.5 shrink-0" />
