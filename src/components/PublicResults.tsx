@@ -21,7 +21,8 @@ export function PublicResults() {
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [hasSnapshot, setHasSnapshot] = useState(false);
-  const cachedDomains = useRef(new Map<string, PublicResultsResponse>());
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const cachedDomains = useRef(new Map<string, { data: PublicResultsResponse; updatedAt: string }>());
   const version = useRef<number | undefined>(undefined);
   const selectedField = useRef('');
 
@@ -29,7 +30,8 @@ export function PublicResults() {
     setVisibleCount(50);
     selectedField.current = next;
     const cached = cachedDomains.current.get(next);
-    setData(previous => cached || { domains: previous.domains, results: [] });
+    setData(previous => cached?.data || { domains: previous.domains, results: [] });
+    setUpdatedAt(cached?.updatedAt ?? null);
     setHasSnapshot(!!cached);
     setError('');
     setLoading(true);
@@ -41,14 +43,16 @@ export function PublicResults() {
     setLoading(true);
     setError('');
     const cached = cachedDomains.current.get(field);
-    if (cached) { setData(cached); setHasSnapshot(true); }
+    if (cached) { setData(cached.data); setUpdatedAt(cached.updatedAt); setHasSnapshot(true); }
     request<PublicResultsResponse>(`/api/public/results${field ? `?field=${encodeURIComponent(field)}` : ''}`, undefined, { signal: controller.signal })
       .then(result => {
-        if (selectedField.current !== field) return;
+        if (controller.signal.aborted || selectedField.current !== field) return;
         if (version.current !== undefined && result.version !== version.current) cachedDomains.current.clear();
         version.current = result.version;
-        cachedDomains.current.set(field, result);
+        const receivedAt = new Date().toISOString();
+        cachedDomains.current.set(field, { data: result, updatedAt: receivedAt });
         setData(result);
+        setUpdatedAt(receivedAt);
         setHasSnapshot(true);
         if (field && !result.domains.includes(field)) selectField('');
       })
@@ -93,13 +97,11 @@ export function PublicResults() {
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />{loading ? '更新中…' : '更新結果'}
         </button>
         </div>
-
       </div>
       {error && <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-relaxed text-amber-900">
         <p>{error} {hasSnapshot ? '目前顯示上次取得的結果。' : ''}{field ? '請按「更新結果」重試。' : '請重新載入領域選單。'}</p>
         {!field && <button type="button" disabled={loading} onClick={() => { setLoading(true); setRefresh(value => value + 1); }} className="mt-3 min-h-11 rounded-xl border border-amber-300 bg-white px-4 py-2 font-bold hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-amber-700 disabled:opacity-50">重新載入領域</button>}
       </div>}
-      {loading && hasSnapshot && <p role="status" className="text-xs text-slate-500">正在更新，暫時顯示上次取得的結果。</p>}
       {loading && !hasSnapshot ? <div role="status" className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white py-14 text-sm text-slate-500"><RefreshCw className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />載入抽籤結果中…</div>
         : !field ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-14 text-center"><p className="font-bold text-slate-700">{data.domains.length ? '選擇領域，查看抽籤結果' : '目前尚未設定領域'}</p><p className="mt-2 text-sm text-slate-500">{data.domains.length ? '請使用上方選單選擇要查詢的領域。' : '領域設定完成後，將在此提供查詢。'}</p></div>
         : <section aria-label={`${field}抽籤結果`} className="space-y-6">
@@ -107,6 +109,7 @@ export function PublicResults() {
             <div className="min-w-0 space-y-2">
               <h2 className="break-words text-xl font-black text-slate-900 sm:text-2xl">{field}</h2>
               <p aria-live="polite" className="text-xs font-medium text-slate-500">{`已公布 ${data.results.length} 件專題`}</p>
+              {updatedAt && <p className="text-xs leading-relaxed text-slate-500">最後更新時間：<time dateTime={updatedAt}>{new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date(updatedAt))}</time></p>}
             </div>
             <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 pt-3 sm:border-0 sm:pt-0">
               <span className="text-xs font-semibold text-slate-500">顯示方式</span>
@@ -138,7 +141,7 @@ export function PublicResults() {
                     </thead>
                     <tbody className="divide-y-2 divide-slate-300">
                       {results.map((result, index) => <tr key={`${result.draw_code}-${index}`} className="bg-white hover:bg-blue-50/50">
-                        <td className="px-4 py-4 font-mono text-lg font-black text-blue-900 [overflow-wrap:anywhere]">{result.draw_code}</td>
+                        <td className="px-4 py-4 font-mono text-lg font-normal text-blue-900 [overflow-wrap:anywhere]">{result.draw_code}</td>
                         <td className="px-4 py-4 font-bold text-slate-700">{result.assigned_group ? formatSessionLabel(result.assigned_group) : '場次尚未提供'}</td>
                         <td className="px-4 py-4 font-semibold leading-relaxed text-slate-900 [overflow-wrap:anywhere]">{result.project_title}</td>
                       </tr>)}
@@ -152,14 +155,14 @@ export function PublicResults() {
                       <dt className="text-xs font-semibold tracking-wide text-slate-500">專題名稱</dt>
                       <dd className="mt-2 text-lg font-bold leading-relaxed text-slate-900 [overflow-wrap:anywhere] sm:text-xl">{result.project_title}</dd>
                     </div>
-                    <div className="mt-auto grid grid-cols-2 gap-3 pt-5">
-                      <div className="min-w-0 rounded-xl border border-blue-100 bg-blue-50 px-2 py-3 text-center sm:px-3">
-                        <dt className="text-xs font-semibold text-blue-700">抽籤編號</dt>
-                        <dd className="mt-1.5 font-mono text-3xl font-black leading-9 tracking-tight text-blue-900 [overflow-wrap:anywhere]">{result.draw_code}</dd>
+                    <div className="mt-auto grid grid-cols-2 gap-3 pt-5 [container-type:inline-size]">
+                      <div className="flex min-h-20 min-w-0 flex-col justify-center rounded-xl border border-blue-100 bg-blue-50 px-2 py-2.5 text-center sm:min-h-22 sm:px-3">
+                        <dt className="text-xs font-normal text-blue-700">抽籤編號</dt>
+                        <dd className="mt-1.5 font-mono text-[clamp(1.125rem,8.5cqw,1.75rem)] font-semibold leading-9 tracking-tight sm:text-[28px] text-blue-900 [overflow-wrap:anywhere]">{result.draw_code}</dd>
                       </div>
-                      <div className="min-w-0 rounded-xl border border-blue-100 bg-blue-50 px-2 py-3 text-center sm:px-3">
-                        <dt className="text-xs font-semibold text-blue-700">報告場次</dt>
-                        <dd className="mt-1.5 text-lg font-black leading-9 text-blue-900 [-webkit-text-stroke:0.3px] [overflow-wrap:anywhere] sm:text-xl">{result.assigned_group ? formatSessionLabel(result.assigned_group) : '場次尚未提供'}</dd>
+                      <div className="flex min-h-20 min-w-0 flex-col justify-center rounded-xl border border-blue-100 bg-blue-50 px-2 py-2.5 text-center sm:min-h-22 sm:px-3">
+                        <dt className="text-xs font-normal text-blue-700">報告場次</dt>
+                        <dd className="mt-1.5 text-[clamp(1.125rem,8.5cqw,1.75rem)] font-semibold leading-9 text-blue-900 [overflow-wrap:anywhere] sm:text-[28px]">{result.assigned_group ? formatSessionLabel(result.assigned_group) : '場次尚未提供'}</dd>
                       </div>
                     </div>
                   </dl>
@@ -167,7 +170,7 @@ export function PublicResults() {
               </div>}
             </section>)}
           {data.results.length > 0 && <div className="space-y-3 pt-2 text-center">
-            <p aria-live="polite" className="text-xs font-medium text-slate-500">目前顯示 {Math.min(visibleCount, data.results.length)}／共 {data.results.length}  件專題</p>
+            <p aria-live="polite" className="text-xs font-medium text-slate-500">目前顯示 {Math.min(visibleCount, data.results.length)}／共 {data.results.length} 件專題</p>
             {visibleCount < data.results.length && <button type="button" onClick={() => setVisibleCount(count => Math.min(count + 50, data.results.length))} className="min-h-12 rounded-xl border border-blue-200 bg-white px-6 py-3 text-sm font-bold text-blue-800 shadow-sm hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">載入更多（還有 {data.results.length - visibleCount} 件）</button>}
           </div>}
         </section>}

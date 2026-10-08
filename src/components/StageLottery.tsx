@@ -510,9 +510,9 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
       >
         {/* Board title and tools */}
         <div className="space-y-5 border-b border-slate-200 pb-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="flex items-center gap-2.5 text-xl font-black text-slate-900 sm:text-3xl">
+              <h3 className="flex items-center gap-2.5 text-lg font-black text-slate-900 sm:text-3xl">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><CheckCircle2 className="h-5 w-5" /></span>
                 <span>分組與報告順序</span>
               </h3>
@@ -520,16 +520,17 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                 依領域與場次排列；編號於各領域內跨組連續編號
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex shrink-0 items-center justify-end">
+
             <button type="button" onClick={openCarousel} disabled={isAnimating || isResetting || drawnPool.length === 0}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-40 cursor-pointer">
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-bold text-blue-800 sm:px-4 hover:bg-blue-100 disabled:opacity-40 cursor-pointer">
               <Play className="h-4 w-4" />輪播結果
             </button>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div className="w-full min-w-0 md:max-w-2xl">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <div className="w-full min-w-0">
               <label htmlFor="board-project-search" className="mb-1.5 block text-sm font-bold text-slate-700">搜尋專題名稱或抽籤編號</label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-blue-700" />
@@ -553,34 +554,37 @@ export const StageLottery: React.FC<StageLotteryProps> = ({
                 )}
               </div>
             </div>
+            <div className="min-w-0 md:min-w-48">
+              <span className="mb-1.5 block text-sm font-bold text-slate-700">顯示方式</span>
             {/* View Switcher: Lanes vs Table */}
-            <div role="group" aria-label="看板檢視方式" className="inline-flex min-h-12 w-full items-center rounded-xl border border-slate-200 bg-slate-100 p-1 text-sm sm:w-auto md:shrink-0">
+            <div role="group" aria-label="看板檢視方式" className="grid min-h-12 w-full grid-cols-2 items-center rounded-xl border border-slate-200 bg-slate-100 p-1 text-sm">
               <button
                 type="button"
                 onClick={() => setBoardDisplayMode('lanes')}
                 aria-pressed={boardDisplayMode === 'lanes'}
-                className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 font-semibold transition-all cursor-pointer ${
+                className={`flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 font-semibold transition-colors cursor-pointer ${
                   boardDisplayMode === 'lanes'
-                    ? 'bg-white text-rose-700 shadow-xs font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-blue-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-white/60 hover:text-slate-900'
                 }`}
               >
                 <LayoutGrid className="h-4 w-4" />
-                <span>分組看板</span>
+                <span>看板</span>
               </button>
               <button
                 type="button"
                 onClick={() => setBoardDisplayMode('table')}
                 aria-pressed={boardDisplayMode === 'table'}
-                className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 font-semibold transition-all cursor-pointer ${
+                className={`flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 font-semibold transition-colors cursor-pointer ${
                   boardDisplayMode === 'table'
-                    ? 'bg-white text-rose-700 shadow-xs font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-blue-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-white/60 hover:text-slate-900'
                 }`}
               >
                 <Table className="h-4 w-4" />
-                <span>名單表格</span>
+                <span>表格</span>
               </button>
+            </div>
             </div>
           </div>
         </div>

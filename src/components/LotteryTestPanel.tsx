@@ -1,3 +1,4 @@
+import { formatSessionLabel } from '../lib/sessionLabel';
 import { useRef, useState } from 'react';
 import { FlaskConical, LoaderCircle, X } from 'lucide-react';
 import type { DomainConfig } from '../types';
@@ -55,10 +56,10 @@ export function LotteryTestPanel({ version, configs, disabled }: { version: numb
           {report.version !== version && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">名冊或設定已更新，這份報告使用舊資料，請重新測試。</p>}
           {report.domains.map(domain => <section key={domain.field} className="min-w-0 space-y-3 rounded-xl border border-slate-200 p-4">
             <h3 className="break-words font-bold text-slate-900">{domain.field} · {domain.projectCount} 件</h3>
-            <div className="flex flex-wrap gap-2">{domain.groups.map(g => <span key={g.group} className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700">第 {g.group} 組：{domain.preview.length ? `${g.count} 件` : '未產生結果'}{g.target !== null ? `（指定 ${g.target} 件）` : ''}</span>)}</div>
+            <div className="flex flex-wrap gap-2">{domain.groups.map(g => <span key={g.group} className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700">{formatSessionLabel(g.group)}：{domain.preview.length ? `${g.count} 件` : '未產生結果'}{g.target !== null ? `（指定 ${g.target} 件）` : ''}</span>)}</div>
             {domain.issues.length > 0 && <ul className="space-y-2 text-sm">{domain.issues.map((issue, i) => <li key={i} className={`break-words rounded-lg p-3 ${issue.level === 'error' ? 'bg-rose-50 text-rose-800' : 'bg-amber-50 text-amber-900'}`}>{issue.level === 'error' ? '問題：' : '提醒：'}{issue.message}</li>)}</ul>}
-            {domain.preview.length > 0 && <details><summary className="cursor-pointer text-sm font-semibold text-blue-700">查看本次試跑分組與順位（未儲存）</summary>
-              <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="border-b text-slate-500"><th className="p-2">原始編號</th><th className="p-2">抽籤後編號</th><th className="p-2">組別／順位</th><th className="p-2">專題名稱</th></tr></thead><tbody>{domain.preview.map((p, i) => <tr key={i} className="border-b border-slate-100"><td className="whitespace-nowrap p-2 font-mono">{p.originalCode}</td><td className="whitespace-nowrap p-2 font-mono">{p.drawCode}</td><td className="whitespace-nowrap p-2">第 {p.group} 組／第 {p.order} 位</td><td className="min-w-40 p-2">{p.title}</td></tr>)}</tbody></table></div>
+            {domain.preview.length > 0 && <details><summary className="cursor-pointer text-sm font-semibold text-blue-700">查看本次試跑場次（未儲存）</summary>
+              <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="border-b text-slate-500"><th className="p-2">原始編號</th><th className="p-2">抽籤後編號</th><th className="p-2">場次</th><th className="p-2">專題名稱</th></tr></thead><tbody>{domain.preview.map((p, i) => <tr key={i} className="border-b border-slate-100"><td className="whitespace-nowrap p-2 font-mono">{p.originalCode}</td><td className="whitespace-nowrap p-2 font-mono">{p.drawCode}</td><td className="whitespace-nowrap p-2">{formatSessionLabel(p.group)}</td><td className="min-w-40 p-2">{p.title}</td></tr>)}</tbody></table></div>
             </details>}
           </section>)}
         </div>}

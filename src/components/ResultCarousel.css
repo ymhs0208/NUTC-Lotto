@@ -7,7 +7,7 @@
 .result-carousel-heading p { font-size:14px; color:#52657a; font-weight:600; margin-bottom:4px; }
 .result-carousel-heading h2 { font-size:clamp(22px,3vw,42px); line-height:1.2; font-weight:900; overflow-wrap:anywhere; }
 .result-carousel-meta { display:flex; align-items:center; gap:20px; color:#52657a; }
-.result-carousel-group strong { color:#28518a; font-size:24px; white-space:nowrap; }
+.result-carousel-group strong { color:#28518a; font-size:28px; font-weight:700; white-space:nowrap; }
 .result-carousel-group strong b { font-size:36px; }
 .result-carousel-group { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
 .result-carousel-page-info { display:flex; align-items:center; gap:16px; margin-left:auto; }
@@ -44,7 +44,7 @@
  .result-carousel-heading p { font-size:11px; }
  .result-carousel-header .result-control span { display:none; }
  .result-carousel-meta { flex-wrap:wrap; gap:4px 12px; font-size:12px; }
- .result-carousel-group strong { font-size:18px; } .result-carousel-group strong b { font-size:26px; }
+ .result-carousel-group strong { font-size:22px; } .result-carousel-group strong b { font-size:26px; }
  .result-carousel-group { gap:6px; }
  .result-carousel-group-page { padding:5px 8px; gap:6px; }
  .result-carousel-group-page>span { font-size:12px; }
@@ -65,7 +65,7 @@
  .result-carousel-logo { width:32px; height:32px; }
  .result-carousel-heading p,.result-carousel-hint { display:none; }
  .result-carousel-heading h2 { font-size:20px; }
- .result-carousel-group strong { font-size:16px; } .result-carousel-group strong b { font-size:22px; }
+ .result-carousel-group strong { font-size:20px; } .result-carousel-group strong b { font-size:22px; }
 }
 
 @media(max-height:850px) {

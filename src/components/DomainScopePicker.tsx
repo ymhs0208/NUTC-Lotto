@@ -19,7 +19,7 @@ export function DomainScopePicker({ domains, projects, selected, disabled, onCha
   const checked = selected === null ? available : selected.filter(field => available.includes(field));
   const total = projects.filter(project => checked.includes(project.field)).length;
   const all = available.length > 0 && checked.length === available.length;
-  const label = !available.length ? '所有領域已有抽籤結果' : all ? `${available.length === fields.length ? '全校所有領域' : '全部可抽籤領域'}（${total} 件）` : checked.length === 1 ? `${checked[0]}（${total} 件）` : checked.length ? `已選 ${checked.length} 個領域（${total} 件）` : '請勾選抽籤領域';
+  const label = !available.length ? '目前沒有可抽籤領域' : all ? `${available.length === fields.length ? '全校所有領域' : '所有未抽籤領域'}（${total} 件）` : checked.length === 1 ? `${checked[0]}（${total} 件）` : checked.length ? `已選 ${checked.length} 個領域（${total} 件）` : '請勾選抽籤領域';
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   useEffect(() => {
     if (!open) return;
@@ -37,9 +37,9 @@ export function DomainScopePicker({ domains, projects, selected, disabled, onCha
       <div className="domain-scope-list">{domains.map(domain => <label key={domain.id} aria-disabled={!available.includes(domain.field)}><input type="checkbox" disabled={!available.includes(domain.field)} checked={checked.includes(domain.field)} onChange={event => {
         const next = event.target.checked ? [...checked, domain.field] : checked.filter(field => field !== domain.field);
         onChange(next.length === fields.length ? null : next);
-      }} /><span>{domain.field}</span><small>{!available.includes(domain.field) ? '已有結果' : `${projects.filter(project => project.field === domain.field).length} 件`}</small></label>)}</div>
+      }} /><span>{domain.field}</span><small>{!available.includes(domain.field) ? `已抽籤 · ${projects.filter(project => project.field === domain.field).length} 件` : `${projects.filter(project => project.field === domain.field).length} 件`}</small></label>)}</div>
       {!domains.length && <p>尚無領域設定</p>}
-      <p className="domain-scope-help">已有結果的領域無法勾選，重設結果後即可重新選擇。</p>
+      <p className="domain-scope-help">已有抽籤結果的領域不可勾選；重設結果後即可再次選取。</p>
     </div>}
   </div>;
 }

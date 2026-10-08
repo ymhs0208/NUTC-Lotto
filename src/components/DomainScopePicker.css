@@ -8,6 +8,7 @@
 .domain-scope-heading>span { font-size:11px; color:#52657a; }
 .domain-scope-heading button { margin-left:auto; display:flex; align-items:center; gap:4px; }
 .domain-scope-picker .domain-scope-options button { color:#28518a; background:#edf4fd; border-radius:8px; padding:6px 8px; font-size:12px; font-weight:700; cursor:pointer; min-height:32px; border:0; }
+.domain-scope-picker .domain-scope-options button:disabled { color:#94a3b8; background:#f1f5f9; cursor:not-allowed; }
 .domain-scope-shortcuts { margin:10px 0; }
 .domain-scope-shortcuts>span { margin-left:auto; color:#52657a; font-size:12px; }
 .domain-scope-list { max-height:min(330px,45dvh); overflow:auto; }

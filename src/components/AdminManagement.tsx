@@ -893,8 +893,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                 }`}
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-slate-500">顯示代碼</span>
-                  <span className="text-xs font-bold font-mono text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || '領域名稱'}</span>
+                  <span className="text-xs font-medium text-slate-500">代碼</span>
+                  <span className="text-xs font-bold tabular-nums text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || '領域名稱'}</span>
                 </div>
                 {/* Header: Title & Group Count */}
                 <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
@@ -1014,7 +1014,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     }`}
                   >
                     <td className="py-2 px-4 text-center border border-slate-200 whitespace-nowrap">
-                      <span className="text-xs font-bold font-mono text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || '領域名稱'}</span>
+                      <span className="text-xs font-bold tabular-nums text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || '領域名稱'}</span>
                     </td>
                     <td className="py-2 px-4 text-slate-800 border border-slate-200">
                       <span className="font-semibold text-slate-900">{stat.field}</span>
@@ -1580,7 +1580,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                   id="domain-draw-prefix"
                   value={domainFormPrefix}
                   onChange={e => { setDomainFormPrefix(e.target.value); setDomainFormError(null); }}
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 >
                   <option value="">沿用預設{getDomainCode(domainFormName) ? `（${getDomainCode(domainFormName)}）` : '（領域名稱）'}</option>
                   {Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)).map(letter => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, Search, ClipboardList } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Search, ClipboardList } from 'lucide-react';
 import { isRequestCancelled } from '../lib/api';
 import { useApiRequest } from '../lib/useApiRequest';
 import { staffActions, type StaffLog, type StaffLogPage } from '../types/staffLogs';
@@ -40,25 +40,24 @@ export function StaffLogs() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [request, email, action, before, revision]);
-  const iconButton = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40';
-  return <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-    <a href="/admin" className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-700"><ArrowLeft size={16} />管理後台</a>
-    <header className="mt-6 flex items-center justify-between gap-4 border-b border-slate-200 pb-6">
-      <h1 className="flex items-center gap-3 text-xl font-bold text-slate-900 sm:text-2xl"><ClipboardList className="shrink-0 text-emerald-700" />工作人員操作紀錄</h1>
-      <button type="button" title="重新整理" aria-label="重新整理" disabled={loading} className={iconButton} onClick={() => { setCursors([undefined]); setRevision(value => value + 1); }}><RefreshCw size={18} className={loading ? 'animate-spin motion-reduce:animate-none' : ''} /></button>
+  const iconButton = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40';
+  return <section className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6">
+    <header className="flex flex-wrap items-center justify-between gap-3">
+      <div><h1 className="flex items-center gap-2 text-xl font-black text-slate-900 sm:text-2xl"><ClipboardList className="shrink-0 text-blue-700" />工作人員操作紀錄</h1><p className="mt-1 text-sm text-slate-500">依時間由新到舊查看操作紀錄；日期以臺灣時間顯示。</p></div>
+      <div className="flex items-center gap-2"><a href="/admin" className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700">返回管理後台</a><button type="button" title="重新整理" aria-label="重新整理" disabled={loading} className={iconButton} onClick={() => { setCursors([undefined]); setRevision(value => value + 1); }}><RefreshCw size={18} className={loading ? 'animate-spin motion-reduce:animate-none' : ''} /></button></div>
     </header>
-    <form className="flex flex-wrap items-end gap-3 py-5" onSubmit={event => { event.preventDefault(); setEmail(emailInput.trim()); setCursors([undefined]); setRevision(value => value + 1); }}>
-      <label className="flex min-w-0 flex-1 flex-col gap-2 text-sm text-slate-600">工作人員帳號<input type="search" maxLength={256} value={emailInput} onChange={event => setEmailInput(event.target.value)} placeholder="搜尋電子信箱" className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-slate-900" /></label>
+    <form className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4" onSubmit={event => { event.preventDefault(); setEmail(emailInput.trim()); setCursors([undefined]); setRevision(value => value + 1); }}>
+      <label className="flex min-w-0 flex-1 flex-col gap-2 text-sm text-slate-600">工作人員帳號<input type="search" maxLength={256} value={emailInput} onChange={event => setEmailInput(event.target.value)} placeholder="搜尋電子信箱" className="min-h-11 min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-slate-900" /></label>
       <button type="submit" title="搜尋" aria-label="搜尋" className={iconButton}><Search size={18} /></button>
-      <label className="flex w-full flex-col gap-2 text-sm text-slate-600 sm:w-52">操作類型<select value={action} onChange={event => { setAction(event.target.value); setCursors([undefined]); }} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-slate-900"><option value="">全部操作</option>{Object.entries(staffActions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+      <label className="flex w-full flex-col gap-2 text-sm text-slate-600 sm:w-52">操作類型<select value={action} onChange={event => { setAction(event.target.value); setCursors([undefined]); }} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-slate-900"><option value="">全部操作</option>{Object.entries(staffActions).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
     </form>
-    {error ? <div role="alert" className="border-y border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">{error}<button type="button" className="ml-4 underline" onClick={() => setRevision(value => value + 1)}>重試</button></div> :
-      <div className="border-y border-slate-200" aria-busy={loading}>
+    {error ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">{error}<button type="button" className="ml-4 underline" onClick={() => setRevision(value => value + 1)}>重試</button></div> :
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-busy={loading}>
         <div className="hidden lg:block">
           <table className="w-full table-fixed text-left text-sm leading-6">
             <caption className="sr-only">工作人員操作紀錄，依時間由新到舊排列</caption>
             <colgroup><col className="w-36" /><col className="w-[25%]" /><col className="w-44" /><col /><col className="w-24" /></colgroup>
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><tr>{['時間（台北）', '工作人員', '操作', '內容', '資料版本'].map((label, index) => <th scope="col" key={label} className={`px-4 py-3 font-medium ${index === 4 ? 'text-right' : ''}`}>{label}</th>)}</tr></thead>
+            <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><tr>{['時間（台北）', '工作人員', '操作', '內容', '資料版本'].map((label, index) => <th scope="col" key={label} className={`px-4 py-3 font-bold ${index === 4 ? 'text-right' : ''}`}>{label}</th>)}</tr></thead>
             <tbody className="divide-y divide-slate-100 bg-white">{loading || !data.logs.length ? <tr><td colSpan={5} className="px-4 py-16 text-center text-slate-500">{loading ? '載入紀錄中…' : '目前沒有符合條件的紀錄'}</td></tr> : data.logs.map(log => <tr key={log.id} className="align-top transition-colors hover:bg-slate-50">
               <td className="px-4 py-4"><LogTime log={log} /></td>
               <td className="px-4 py-4"><LogAccount log={log} /></td>
