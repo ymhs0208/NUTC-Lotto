@@ -48,6 +48,7 @@ export function projectDto(p: ProjectItem): ProjectItem {
     id: p.id, seq_no: p.seq_no, education_system: p.education_system, department: p.department,
     class_name: p.class_name, advisor: p.advisor, field: p.field, original_code: p.original_code,
     project_title: p.project_title, leader_id: p.leader_id,
+    ...(typeof p.leader_name === 'string' ? { leader_name: p.leader_name.trim() } : {}),
     assigned_group: p.assigned_group ?? null, draw_order: p.draw_order ?? null,
     draw_code: p.draw_code ?? null, draw_time: p.draw_time ?? null, evaluators: p.evaluators || [],
   };

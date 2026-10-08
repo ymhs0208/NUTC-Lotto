@@ -100,20 +100,21 @@ export class LotteryDatabase {
       switch (operation) {
         case 'publicResults': {
           if (typeof args.field !== 'string' || args.field.length > 512) throw new ApiError(400, '請選擇有效的領域。');
-          // Synchronous reads use one consistent SQLite snapshot. Only the three
-          // public columns cross the database binding; private documents stay here.
+          // Synchronous reads expose only result fields and the public leader name.
+          // Student credentials and private documents stay in this binding.
           const metadata = this.one<{ domains: string; version: number }>('SELECT domains, version FROM metadata WHERE id = 1')!;
           const domains = (JSON.parse(metadata.domains) as DomainConfig[]).map(domain => domain.field);
           const results = args.field && domains.includes(args.field)
             ? this.ctx.storage.sql.exec(`SELECT
                 json_extract(document, '$.draw_code') AS draw_code,
                 json_extract(document, '$.assigned_group') AS assigned_group,
-                json_extract(document, '$.project_title') AS project_title
+                json_extract(document, '$.project_title') AS project_title,
+                json_extract(document, '$.leader_name') AS leader_name
               FROM projects
               WHERE json_extract(document, '$.field') = ?
                 AND json_extract(document, '$.draw_order') > 0
               ORDER BY json_extract(document, '$.assigned_group'), json_extract(document, '$.draw_order'), position`, args.field)
-              .toArray().map(row => ({ draw_code: String(row.draw_code || '編號尚未提供'), assigned_group: row.assigned_group == null ? null : Number(row.assigned_group), project_title: String(row.project_title) } satisfies PublicDrawResult))
+              .toArray().map(row => ({ draw_code: String(row.draw_code || '編號尚未提供'), assigned_group: row.assigned_group == null ? null : Number(row.assigned_group), project_title: String(row.project_title), ...(row.leader_name ? { leader_name: String(row.leader_name) } : {}) } satisfies PublicDrawResult))
             : [];
           data = { domains, results, version: metadata.version };
           break;

@@ -162,12 +162,12 @@ test('blank or pending report-session columns do not hide populated grouping-ses
   }
 });
 
-test('Chinese grouping sessions survive Excel import, database save and state reload', { timeout: 180000 }, async () => {
+test('Chinese grouping sessions and leader names survive import, save, edit and public results', { timeout: 180000 }, async () => {
   const { localWorker } = await import('../scripts/local-worker');
   const { hashPassword } = await import('../server/credentials');
   const worker = await localWorker();
   try {
-    const parsed = await parseExcelFile(makeFile([{ ...row, 分組場次: '第一場次', 抽籤編號: 'A01', 組內順序: '1' }]));
+    const parsed = await parseExcelFile(makeFile([{ ...row, 分組場次: '第一場次', 抽籤編號: 'A01', 組內順序: '1', 組長姓名: ' 王小明 ' }]));
     assert.equal(parsed.success, true, parsed.error);
     assert.equal(parsed.projects![0].assigned_group, 1);
     await worker.start();
@@ -180,5 +180,14 @@ test('Chinese grouping sessions survive Excel import, database save and state re
     assert.equal(reloaded.data.projects[0].assigned_group, 1);
     assert.equal(reloaded.data.projects[0].draw_order, 1);
     assert.equal(reloaded.data.projects[0].draw_code, 'A01');
+    assert.equal(reloaded.data.projects[0].leader_name, '王小明');
+    const exported = XLSX.utils.sheet_to_json<Record<string, string>>(createExportWorkbook(reloaded.data.projects).Sheets['專題抽籤順序表']);
+    assert.equal(exported[0].組長姓名, '王小明');
+    const edited = await worker.request('/api/projects', { version: reloaded.data.version, projects: [{ ...reloaded.data.projects[0], leader_name: '李小華' }] }, login.cookie);
+    assert.equal(edited.status, 200);
+    const published = await worker.request(`/api/public/results?field=${encodeURIComponent(row.領域)}`);
+    assert.equal(published.status, 200);
+    assert.deepEqual(published.data.results, [{ assigned_group: 1, draw_code: 'A01', project_title: row.專題名稱, leader_name: '李小華' }]);
+
   } finally { await worker.dispose(); }
 });

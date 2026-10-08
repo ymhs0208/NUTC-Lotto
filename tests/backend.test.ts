@@ -9,7 +9,7 @@ const domains = [{ id: 'd1', field: '測試領域', groupCount: 2, evaluatorsPer
 
 test('roster and evaluator validation rejects malformed data', () => {
   validateProjects([project]); validateDomains(domains);
-  for (const bad of [[project, project], [{ ...project, password_hash: 'injected' }], [{ ...project, shared_password_mode: true }], [{ ...project, draw_order: -1 }], [{ ...project, password: {} }]]) assert.throws(() => validateProjects(bad));
+  for (const bad of [[project, project], [{ ...project, password_hash: 'injected' }], [{ ...project, shared_password_mode: true }], [{ ...project, draw_order: -1 }], [{ ...project, password: {} }], [{ ...project, leader_name: {} }], [{ ...project, leader_name: 'a'.repeat(129) }]]) assert.throws(() => validateProjects(bad));
   for (const group of ['0', '-1', '3', '50', '01', '1.5', '1e0', ' 1', '', '999999999999999999999999']) assert.throws(() => validateDomains([{ ...domains[0], evaluatorsPerGroup: { [group]: ['李教授'] } }]));
   for (const evaluatorsPerGroup of ['invalid', [], { 1: 'invalid' }, { 1: [123] }]) assert.throws(() => validateDomains([{ ...domains[0], evaluatorsPerGroup }]));
 });

@@ -47,11 +47,12 @@ export function ProjectRosterCard({ project: p, sharedPasswordEnabled, onEdit, o
         </dl>
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <div className="min-w-0"><dt className="text-xs text-slate-500">組長姓名</dt><dd className="mt-1 break-words font-semibold text-slate-800">{p.leader_name || '尚未提供'}</dd></div>
           <div className="min-w-0"><dt className="text-xs text-slate-500">組長學號</dt><dd className="mt-1 break-all font-mono font-semibold text-blue-700">{p.leader_id || '—'}</dd></div>
           <div className="min-w-0"><dt className="text-xs text-slate-500">指導老師</dt><dd className="mt-1 break-words font-medium text-slate-800">{p.advisor || '未設定'}</dd></div>
           <div className="min-w-0"><dt className="text-xs text-slate-500">班級</dt><dd className="mt-1 break-words text-slate-800">{p.class_name || '—'}</dd></div>
           <div className="min-w-0"><dt className="text-xs text-slate-500">學制</dt><dd className="mt-1 break-words text-slate-800">{p.education_system || '—'}</dd></div>
-          <div className="col-span-2 min-w-0"><dt className="text-xs text-slate-500">系所</dt><dd className="mt-1 break-words text-slate-800">{p.department || '—'}</dd></div>
+          <div className="min-w-0"><dt className="text-xs text-slate-500">系所</dt><dd className="mt-1 break-words text-slate-800">{p.department || '—'}</dd></div>
           <div className="col-span-2 min-w-0 border-t border-slate-100 pt-3">
             <dt className="text-xs text-slate-500">評審委員</dt>
             <dd className="mt-1 break-words leading-relaxed text-slate-800">{p.evaluators?.length ? p.evaluators.join('、') : drawn ? '尚未設定評審' : '抽籤後顯示'}</dd>

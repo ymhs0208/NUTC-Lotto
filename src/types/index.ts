@@ -9,6 +9,7 @@ export interface ProjectItem {
   original_code: string; // 原始編號 e.g. A01，依領域自動編號
   project_title: string; // 專題名稱
   leader_id: string; // 組長學號
+  leader_name?: string; // 組長姓名（舊名冊可不提供）
   password?: string; // 僅供設定新密碼的輸入，API 不回傳
   password_set?: boolean; // 管理員可查看是否已設定密碼
   
@@ -39,7 +40,7 @@ export type ViewMode = 'student' | 'stage' | 'admin' | 'logs' | 'results';
 
 // Explicit public result contract; no student or staff credentials.
 export interface PublicDrawResult {
-  leader_name?: string; // 未提供姓名時，結果頁沿用參考版的空值顯示
+  leader_name?: string; // 僅提供已公布專題的組長姓名
   draw_code: string;
   assigned_group: number | null;
   project_title: string;

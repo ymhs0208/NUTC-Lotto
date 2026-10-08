@@ -14,6 +14,7 @@ export const REQUIRED_INPUT_HEADERS = [
   '原始編號',
   '專題名稱',
   '組長學號',
+  '組長姓名',
   '組長密碼'
 ];
 
@@ -27,6 +28,7 @@ export const REQUIRED_OUTPUT_HEADERS = [
   '原始編號',
   '專題名稱',
   '組長學號',
+  '組長姓名',
   '抽籤編號',
   '報告場次',
   '組內順序'
@@ -86,6 +88,7 @@ export async function parseExcelFile(file: File): Promise<{
     const codeKey = findKey('原始編號') || findKey('編號');
     const titleKey = findKey('專題名稱');
     const leaderKey = findKey('組長學號');
+    const leaderNameKey = findKey('組長姓名');
     const passwordKey = findKey('組長密碼') || findKey('密碼') || findKey('登入密碼');
     // Check if there is already a draw code column in this excel
     const drawCodeKey = findKey('抽籤編號') || findKey('+編號(抽籤後)') || findKey('編號(抽籤後)') || findKey('抽籤後編號') || findKey('抽籤序號');
@@ -155,6 +158,7 @@ export async function parseExcelFile(file: File): Promise<{
         original_code: originalCode,
         project_title: title,
         leader_id: leaderId,
+        leader_name: leaderNameKey ? String(row[leaderNameKey] ?? '').trim() : '',
         password: password,
         assigned_group: assignedGroup,
         draw_order: drawOrder,
@@ -207,6 +211,7 @@ export function createExportWorkbook(projects: ProjectItem[]): XLSX.WorkBook {
       '原始編號': p.original_code,
       '專題名稱': p.project_title,
       '組長學號': p.leader_id,
+      '組長姓名': p.leader_name || '',
       '抽籤編號': p.draw_code || (p.draw_order ? '編號尚未提供' : '未抽籤'),
       '報告場次': p.assigned_group ? formatSessionLabel(p.assigned_group) : '待分配',
       '組內順序': p.draw_order || '待抽籤',
@@ -226,13 +231,14 @@ export function createExportWorkbook(projects: ProjectItem[]): XLSX.WorkBook {
     { wch: 12 }, // 編號
     { wch: 45 }, // 專題名稱
     { wch: 14 }, // 組長學號
+    { wch: 14 }, // 組長姓名
     { wch: 18 }, // 抽籤編號
     { wch: 18 }, // 報告場次
     { wch: 12 }, // 組內順序
   ];
 
   const workbook = XLSX.utils.book_new();
-  worksheet['!autofilter'] = { ref: worksheet['!ref'] || 'A1:L1' };
+  worksheet['!autofilter'] = { ref: worksheet['!ref'] || 'A1:M1' };
   XLSX.utils.book_append_sheet(workbook, worksheet, '專題抽籤順序表');
 
   return workbook;
@@ -260,12 +266,13 @@ export function createInputTemplateWorkbook(configs?: DomainConfig[]): XLSX.Work
     '原始編號': getDomainCode(field) ? `${getDomainCode(field)}01` : '',
     '專題名稱': index === 0 ? '基於生成式AI之智慧排程平台' : '智慧倉儲即時物聯網監控與調度系統',
     '組長學號': index === 0 ? '110214101' : '110211102',
+    '組長姓名': '',
     '組長密碼': '',
   }));
   const ws = XLSX.utils.json_to_sheet(templateRows, { header: REQUIRED_INPUT_HEADERS });
   ws['!cols'] = [
     { wch: 8 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 15 },
-    { wch: 32 }, { wch: 14 }, { wch: 45 }, { wch: 14 }, { wch: 16 }
+    { wch: 32 }, { wch: 14 }, { wch: 45 }, { wch: 14 }, { wch: 14 }, { wch: 16 }
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '專題匯入範本');

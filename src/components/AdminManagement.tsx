@@ -213,6 +213,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     const matchesSearch =
       p.project_title.toLowerCase().includes(q) ||
       p.leader_id.toLowerCase().includes(q) ||
+      (p.leader_name || '').toLowerCase().includes(q) ||
       p.original_code.toLowerCase().includes(q) ||
       p.advisor.toLowerCase().includes(q) ||
       p.class_name.toLowerCase().includes(q) ||
@@ -248,7 +249,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     beginDraft();
     setEditingDomain(null);
     setDomainFormName('');
-    setDomainFormPrefix('');
+    setDomainFormPrefix('ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find(letter => !domainConfigs.some(config => getDomainCode(config.field, config.drawPrefix) === letter)) || '');
     setDomainFormGroupCount(2);
     setDomainManualCounts(false);
     setDomainCapacityDrafts({});
@@ -579,6 +580,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             ...p,
             ...formData,
             leader_id: cleanLeaderId,
+            leader_name: formData.leader_name?.trim() || '',
             password: finalPassword,
             draw_order: formData.draw_code === p.draw_code ? p.draw_order : formData.draw_code ? parseInt(String(formData.draw_code).replace(/\D/g, ''), 10) || p.draw_order : p.draw_order,
           } as ProjectItem;
@@ -598,6 +600,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
         original_code: formData.original_code || `P-${nextSeq}`,
         project_title: formData.project_title,
         leader_id: cleanLeaderId,
+        leader_name: formData.leader_name?.trim() || '',
         password: finalPassword,
         draw_order: formData.draw_code ? parseInt(String(formData.draw_code).replace(/\D/g, ''), 10) || null : null,
         draw_code: formData.draw_code || null,
@@ -831,7 +834,9 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
               <Layers className="w-4 h-4 text-rose-600 shrink-0" />
               <span>專題展領域、分組數與評審委員設定</span>
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">領域依代碼 A–Z 自動排序，可在「編輯」中修改抽籤結果字母、分組與評審設定。</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              領域依代碼 A–Z 自動排序，可在「編輯」中修改對應字母、分組與評審設定。
+            </p>
           </div>
 
           <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
@@ -895,7 +900,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-xs font-medium text-slate-500">代碼</span>
-                  <span className="text-xs font-bold tabular-nums text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || '領域名稱'}</span>
+                  <span className="text-xs font-bold tabular-nums text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || cfgObj.field.slice(0, 4)}</span>
                 </div>
                 {/* Header: Title & Group Count */}
                 <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
@@ -1015,7 +1020,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     }`}
                   >
                     <td className="py-2 px-4 text-center border border-slate-200 whitespace-nowrap">
-                      <span className="text-xs font-bold tabular-nums text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || '領域名稱'}</span>
+                      <span className="text-xs font-bold tabular-nums text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || cfgObj.field.slice(0, 4)}</span>
                     </td>
                     <td className="py-2 px-4 text-slate-800 border border-slate-200">
                       <span className="font-semibold text-slate-900">{stat.field}</span>
@@ -1143,10 +1148,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             <div className="relative">
               <input
                 type="text"
-                aria-label="搜尋專題名稱、學號或老師"
+                aria-label="搜尋專題名稱、組長姓名、學號或老師"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜尋專題名稱、學號、老師..."
+                placeholder="搜尋專題名稱、組長姓名、學號、老師..."
                 className="w-full sm:w-72 bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               />
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
@@ -1259,7 +1264,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
               <span>可橫向滑動查看完整名冊欄位與操作</span>
             </div>
             <div className="overflow-x-auto max-h-[550px] overflow-y-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-              <table className="w-full text-left text-xs sm:text-sm min-w-[820px]">
+              <table className="w-full text-left text-xs sm:text-sm min-w-[900px]">
                 <thead className="sticky top-0 bg-slate-100/90 text-slate-700 z-10 border-b border-slate-200">
                   <tr className="text-xs font-semibold">
                     {sortableHeader('seq_no', '序號')}
@@ -1271,6 +1276,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     {sortableHeader('original_code', '編號')}
                     {sortableHeader('project_title', '專題名稱')}
                     {sortableHeader('leader_id', '組長學號')}
+                    {sortableHeader('leader_name', '組長姓名')}
                     {sortableHeader('password_set', '登入密碼')}
                     {sortableHeader('advisor', '指導老師')}
                     <th scope="col" className="py-2.5 px-3 text-right">操作</th>
@@ -1279,7 +1285,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                 <tbody className="divide-y divide-slate-100">
                   {filteredProjects.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-12 text-center text-slate-400">
+                      <td colSpan={13} className="py-12 text-center text-slate-400">
                         <div className="space-y-1">
                           <p className="font-medium text-slate-600 text-sm">
                             {projects.length === 0
@@ -1365,6 +1371,9 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                           </td>
                           <td className="py-2.5 px-3 font-mono whitespace-nowrap">
                             <span className="font-semibold text-blue-600">{p.leader_id}</span>
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className={p.leader_name ? 'font-semibold text-slate-800' : 'text-slate-400'}>{p.leader_name || '尚未提供'}</span>
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap">
                             <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-bold ${p.password_set ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
@@ -1574,22 +1583,15 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
               </div>
 
               <div>
-                <label htmlFor="domain-draw-prefix" className="block text-slate-700 mb-1 font-semibold">
-                  對應字母
-                </label>
-                <select
-                  id="domain-draw-prefix"
-                  value={domainFormPrefix}
+                <label htmlFor="domain-code" className="block text-slate-700 mb-1 font-semibold">對應字母</label>
+                <select id="domain-code" value={domainFormPrefix}
                   onChange={e => { setDomainFormPrefix(e.target.value); setDomainFormError(null); }}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-slate-900 disabled:opacity-60"
-                >
-                  <option value="">沿用預設{getDomainCode(domainFormName) ? `（${getDomainCode(domainFormName)}）` : '（領域名稱）'}</option>
-                  {Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)).map(letter => {
-                    const used = domainConfigs.some(c => c.id !== editingDomain?.id && getDomainCode(c.field, c.drawPrefix) === letter);
-                    return <option key={letter} value={letter} disabled={used}>{letter}（{letter}01、{letter}02…）{used ? '（已使用）' : ''}</option>;
-                  })}
+                  disabled={!!editingDomain && projects.some(p => p.field === editingDomain.field && (p.draw_code || p.draw_order || p.assigned_group || p.draw_time))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 disabled:opacity-60">
+                  <option value="">{editingDomain && !getDomainCode(editingDomain.field, editingDomain.drawPrefix) ? `沿用既有代碼（${editingDomain.field.slice(0, 4)}）` : '請選擇字母'}</option>
+                  {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => <option key={letter} value={letter}>{letter}（{letter}01、{letter}02…）</option>)}
                 </select>
-                <p className="text-[11px] text-slate-500 mt-1">抽籤後編號預覽：{getDomainCode(domainFormName, domainFormPrefix) || domainFormName.slice(0, 4) || '領域'}{getDomainCode(domainFormName, domainFormPrefix) ? '01' : '-第1組-序號01'}</p>
+                <p className="text-[11px] text-slate-500 mt-1">抽籤後編號使用此字母，各領域不可重複。已有抽籤結果時須先重設才能修改。</p>
               </div>
 
               <div>
@@ -1730,7 +1732,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                   請選擇匯入模式：您可以選擇完全覆蓋現有名單，或是將新名單追加至現有名單之後。
                 </p>
                 <p className="text-xs text-blue-700 mt-2">已讀取分組場次：{pendingImportProjects.filter(project => project.assigned_group != null).length}／{pendingImportProjects.length} 筆。</p>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">「追加」只新增未存在的組長學號，不會更新既有專題的場次。更新既有名冊請使用「完全覆蓋」，並確認 Excel 包含要保留的全部資料。</p>
                 {sharedPasswordEnabled && <p className="text-xs text-indigo-700 mt-2">共用密碼啟用中，匯入檔案內的個別密碼欄位會略過；新專題沿用目前共用密碼。</p>}
                 {projects.some(p => p.draw_order) && <label className="mt-3 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
                   <input type="checkbox" checked={overwriteAcknowledged} onChange={e => setOverwriteAcknowledged(e.target.checked)} className="mt-0.5 shrink-0" />
@@ -1869,6 +1870,10 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="project-leader-name" className="block text-slate-700 mb-1 font-semibold">組長姓名</label>
+                  <input id="project-leader-name" type="text" maxLength={128} value={formData.leader_name || ''} onChange={(e) => setFormData({ ...formData, leader_name: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="公開抽籤結果顯示的姓名" />
+                </div>
                 <div>
                   <label htmlFor="project-leader-id" className="block text-slate-700 mb-1 font-semibold">組長學號 *</label>
                   <input

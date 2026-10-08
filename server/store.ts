@@ -61,6 +61,7 @@ export function validateProjects(value: unknown): asserts value is ProjectItem[]
       throw new ApiError(400, '專題欄位不完整或 ID 重複。');
     }
     if (textFields.some(key => p[key].length > (key === 'project_title' ? 2000 : key === 'leader_id' ? 128 : 512))) throw new ApiError(400, '專題文字欄位過長。');
+    if (p.leader_name != null && (typeof p.leader_name !== 'string' || p.leader_name.length > 128)) throw new ApiError(400, '組長姓名須為不超過 128 字元的文字。');
     for (const key of ['draw_order', 'assigned_group']) {
       if (p[key] != null && (!Number.isInteger(p[key]) || p[key] < 1)) throw new ApiError(400, '抽籤順位與組別必須為正整數。');
     }
