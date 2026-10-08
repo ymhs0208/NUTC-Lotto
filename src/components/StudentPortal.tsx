@@ -35,10 +35,12 @@ export const StudentPortal: React.FC = () => {
   const resultSectionRef = useRef<HTMLDivElement | null>(null);
   const pendingLoginScroll = useRef(false);
   useEffect(() => {
-    if (myProject && pendingLoginScroll.current) {
+    if (!myProject || !pendingLoginScroll.current) return;
+    const frame = requestAnimationFrame(() => {
       pendingLoginScroll.current = false;
-      resultSectionRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-    }
+      resultSectionRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    });
+    return () => cancelAnimationFrame(frame);
   }, [myProject]);
   const requestEpoch = useRef(0);
   const sessionController = useRef<AbortController | null>(null);
