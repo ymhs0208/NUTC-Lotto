@@ -136,6 +136,7 @@ export function PublicResults() {
                       <tr>
                         <th scope="col" className="w-28 whitespace-nowrap px-4 py-3 font-bold">抽籤編號</th>
                         <th scope="col" className="w-36 whitespace-nowrap px-4 py-3 font-bold">報告場次</th>
+                        <th scope="col" className="w-32 whitespace-nowrap px-4 py-3 font-bold">組長姓名</th>
                         <th scope="col" className="px-4 py-3 font-bold">專題名稱</th>
                       </tr>
                     </thead>
@@ -143,6 +144,7 @@ export function PublicResults() {
                       {results.map((result, index) => <tr key={`${result.draw_code}-${index}`} className="bg-white hover:bg-blue-50/50">
                         <td className="px-4 py-4 font-mono text-lg font-normal text-blue-900 [overflow-wrap:anywhere]">{result.draw_code}</td>
                         <td className="px-4 py-4 font-bold text-slate-700">{result.assigned_group ? formatSessionLabel(result.assigned_group) : '場次尚未提供'}</td>
+                        <td className="px-4 py-4 font-semibold text-slate-700 [overflow-wrap:anywhere]">{result.leader_name || '尚未提供'}</td>
                         <td className="px-4 py-4 font-semibold leading-relaxed text-slate-900 [overflow-wrap:anywhere]">{result.project_title}</td>
                       </tr>)}
                     </tbody>
@@ -154,6 +156,10 @@ export function PublicResults() {
                     <div className="min-w-0">
                       <dt className="text-xs font-semibold tracking-wide text-slate-500">專題名稱</dt>
                       <dd className="mt-2 text-lg font-bold leading-relaxed text-slate-900 [overflow-wrap:anywhere] sm:text-xl">{result.project_title}</dd>
+                    </div>
+                    <div className="mt-3 flex min-w-0 flex-wrap items-baseline gap-y-1">
+                      <dt className="shrink-0 text-sm font-medium text-slate-500">組長：</dt>
+                      <dd className="min-w-0 text-sm font-semibold text-slate-700 [overflow-wrap:anywhere]">{result.leader_name || '尚未提供'}</dd>
                     </div>
                     <div className="mt-auto grid grid-cols-2 gap-3 pt-5 [container-type:inline-size]">
                       <div className="flex min-h-20 min-w-0 flex-col justify-center rounded-xl border border-blue-100 bg-blue-50 px-2 py-2.5 text-center sm:min-h-22 sm:px-3">

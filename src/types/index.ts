@@ -39,6 +39,7 @@ export type ViewMode = 'student' | 'stage' | 'admin' | 'logs' | 'results';
 
 // Explicit public result contract; no student or staff credentials.
 export interface PublicDrawResult {
+  leader_name?: string; // 未提供姓名時，結果頁沿用參考版的空值顯示
   draw_code: string;
   assigned_group: number | null;
   project_title: string;
