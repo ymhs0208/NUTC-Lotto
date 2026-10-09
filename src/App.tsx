@@ -45,7 +45,7 @@ export default function App() {
 
   const [authReady, setAuthReady] = useState(false);
   useEffect(() => {
-    if (getViewFromLocation(window.location) === 'results') { setAuthReady(true); return; }
+    if (['student', 'results'].includes(getViewFromLocation(window.location))) { setAuthReady(true); return; }
     let active = true;
     const controller = new AbortController();
     request<{ session: AuthSession }>('/api/auth/me', undefined, { signal: controller.signal }).then(data => {
@@ -119,7 +119,7 @@ export default function App() {
     const controller = new AbortController();
     loadControllerRef.current = controller;
     const requestId = ++loadRequestIdRef.current;
-    if (currentView === 'results' || !getAuthSession()) {
+    if (currentView === 'student' || currentView === 'results' || !getAuthSession()) {
       setProjects([]);
       setDomainConfigs([]);
       setSharedPasswordEnabled(false);
