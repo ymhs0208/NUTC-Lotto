@@ -6,7 +6,6 @@ import { preserveImportedProjectIds } from '../lib/importProjects';
 import { isAdvisorConflict, normalizeProfessorName } from '../lib/lottery';
 import { sortProjects, type ProjectSortKey, type ProjectSortDirection } from '../lib/projectSort';
 import { useModalFocus } from '../lib/useModalFocus';
-import { DataTransfer } from './DataTransfer';
 import { StaffAccounts } from './StaffAccounts';
 import { FloatingNotice } from './FloatingNotice';
 import { ProjectRosterCard } from './ProjectRosterCard';
@@ -672,7 +671,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       </div>
 
       <StaffAccounts />
-      <DataTransfer empty={dataVersion === 0 && projects.length === 0} />
 
       {/* Main admin actions */}
       <div className="space-y-4">
