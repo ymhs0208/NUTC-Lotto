@@ -1,13 +1,20 @@
-import { runtimeEnv } from './runtime';
-import type { DomainConfig, ProjectItem, PublicResultsResponse } from '../src/types';
-import type { StoredProject } from './credentials';
-import type { StaffAccount, StaffSession, StudentSession } from './cloudflareDatabase';
+import { duplicateDrawCodeError } from '../src/lib/drawScope';
+import { database } from './database';
+import type { DomainConfig, ProjectItem } from '../src/types';
+import { removeLegacyCredentials, type StoredProject } from './credentials';
+import { normalizeOriginalCodes } from '../src/lib/originalCodes';
+import { domainCodeCollisionError, sortDomainConfigs } from '../src/lib/domainCodes';
 import { normalizeProfessorName } from '../src/lib/lottery';
 import { LotteryAllocationError, validateGroupCapacities } from '../src/lib/groupCapacities';
 import { ApiError } from './errors';
-import { getDomainCode } from '../src/lib/domainCodes';
-import type { StaffAuditInput, StaffLogPage } from '../src/types/staffLogs';
+import type { AuditEvent, AuditActor } from './audit';
 export { ApiError } from './errors';
+
+// Drop the retired key when reading databases that have not migrated yet.
+function stripLegacyDrawOrder<T extends ProjectItem>(project: T): T {
+  const { draw_order: retired, ...current } = project as T & { draw_order?: unknown };
+  return current as T;
+}
 
 export interface DatabaseState {
   projects: StoredProject[];
@@ -17,36 +24,22 @@ export interface DatabaseState {
 }
 
 export function createStore() {
-  const namespace = runtimeEnv().LOTTERY_DATABASE;
-  if (!namespace) throw new ApiError(503, '尚未設定 Cloudflare 資料庫，請使用 npm run dev。');
-  const database = namespace.get(namespace.idFromName('lottery-v1'));
-  async function call<T>(operation: string, args: object = {}): Promise<T> {
-    try {
-      const response = await database.fetch('https://database.internal', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ operation, args }), signal: AbortSignal.timeout(10000) as unknown as import('@cloudflare/workers-types').AbortSignal,
-      });
-      const result = await response.json() as { data: T; error?: string };
-      if (!response.ok) throw new ApiError(response.status, result.error || '資料庫暫時無法使用。');
-      return result.data;
-    } catch (error) {
-      if (error instanceof ApiError) throw error;
-      throw new ApiError(503, '資料庫暫時無法使用。');
-    }
-  }
+  const db = database();
   return {
-    publicResults: (field: string) => call<PublicResultsResponse>('publicResults', { field }),
-    load: () => call<DatabaseState>('load'),
-    health: async () => { if (!await call<boolean>('health')) throw new ApiError(503, '資料庫暫時無法使用。'); },
-    findProject: (key: 'id' | 'leader_key', value: string) => call<StoredProject | null>('findProject', { key, value }),
-    save: (state: DatabaseState, expectedVersion: number, audit?: StaffAuditInput) => call<DatabaseState>('save', { state, expectedVersion, audit }),
-    staffLogs: (filters: { before?: number; action?: string; email?: string }) => call<StaffLogPage>('staffLogs', filters),
-    findAccount: (key: 'id' | 'email', value: string) => call<StaffAccount | null>('findAccount', { key, value }),
-    putAccounts: (accounts: StaffAccount[]) => call<{ count: number }>('accounts', { accounts }),
-    putSession: (scope: 'student' | 'staff', tokenHash: string, session: StudentSession | StaffSession) => call<boolean>('putSession', { scope, tokenHash, session }),
-    deleteSession: (scope: 'student' | 'staff', tokenHash: string, auditLogout = true) => call<boolean>('deleteSession', { scope, tokenHash, auditLogout }),
-    getStaffSession: (tokenHash: string) => call<StaffSession | null>('getSession', { scope: 'staff', tokenHash }),
-    studentLookup: (tokenHash: string) => call<{ project: StoredProject; credential_version: string } | null>('studentLookup', { tokenHash }),
+    async load(): Promise<DatabaseState> {
+      const state = await db.call('load', {});
+      return { ...state, projects: normalizeOriginalCodes(state.projects.map(stripLegacyDrawOrder), state.domainConfigs), domainConfigs: sortDomainConfigs(state.domainConfigs) };
+    },
+    publicResults: (field = '') => db.call('publicResults', { field }),
+    async health() { await db.call('health', {}); },
+    async findProject(key: 'id' | 'leader_key', value: string): Promise<StoredProject | undefined> {
+      return (await db.call('findProject', { key, value })) || undefined;
+    },
+    async save(state: DatabaseState, expectedVersion: number, audit?: AuditEvent, actor?: AuditActor): Promise<DatabaseState> {
+      const domainConfigs = sortDomainConfigs(state.domainConfigs);
+      const projects = normalizeOriginalCodes(removeLegacyCredentials(state.projects), domainConfigs);
+      return db.call('save', { state: { ...state, projects, domainConfigs }, expectedVersion, audit, actor });
+    },
   };
 }
 
@@ -61,11 +54,9 @@ export function validateProjects(value: unknown): asserts value is ProjectItem[]
       throw new ApiError(400, '專題欄位不完整或 ID 重複。');
     }
     if (textFields.some(key => p[key].length > (key === 'project_title' ? 2000 : key === 'leader_id' ? 128 : 512))) throw new ApiError(400, '專題文字欄位過長。');
-    if (p.leader_name != null && (typeof p.leader_name !== 'string' || p.leader_name.length > 128)) throw new ApiError(400, '組長姓名須為不超過 128 字元的文字。');
-    for (const key of ['draw_order', 'assigned_group']) {
-      if (p[key] != null && (!Number.isInteger(p[key]) || p[key] < 1)) throw new ApiError(400, '抽籤順位與組別必須為正整數。');
-    }
+    if (p.assigned_group != null && (!Number.isSafeInteger(p.assigned_group) || p.assigned_group < 1)) throw new ApiError(400, '場次必須為正整數。');
     if (p.password != null && typeof p.password !== 'string') throw new ApiError(400, '密碼格式不正確。');
+    if (p.leader_name != null && (typeof p.leader_name !== 'string' || p.leader_name.length > 128)) throw new ApiError(400, '組長姓名須為 128 字元以內的文字。');
     if (p.draw_time != null && (typeof p.draw_time !== 'string' || Number.isNaN(Date.parse(p.draw_time)))) throw new ApiError(400, '抽籤時間格式不正確。');
     if (p.draw_code != null && (typeof p.draw_code !== 'string' || p.draw_code.length > 512)) throw new ApiError(400, '抽籤編號格式不正確。');
     if (p.evaluators != null && (!Array.isArray(p.evaluators) || p.evaluators.length > 100 || p.evaluators.some((x: unknown) => typeof x !== 'string' || x.length > 128))) throw new ApiError(400, '評審格式不正確。');
@@ -74,6 +65,8 @@ export function validateProjects(value: unknown): asserts value is ProjectItem[]
     leaders.add(leader);
     ids.add(p.id);
   }
+  const duplicate = duplicateDrawCodeError(value);
+  if (duplicate) throw new ApiError(400, duplicate);
 }
 
 export function validateDomains(value: unknown): asserts value is DomainConfig[] {
@@ -81,13 +74,9 @@ export function validateDomains(value: unknown): asserts value is DomainConfig[]
   if (value.length > 100) throw new ApiError(400, '領域設定最多 100 筆。');
   const ids = new Set<string>();
   const fields = new Set<string>();
-  const prefixes = new Set<string>();
   for (const c of value) {
     if (!c || typeof c.id !== 'string' || !c.id.trim() || typeof c.field !== 'string' || !c.field.trim() || c.id.length > 512 || c.field.length > 512 || ids.has(c.id) || fields.has(c.field) || !Number.isInteger(c.groupCount) || c.groupCount < 1 || c.groupCount > 50) throw new ApiError(400, '領域 ID、名稱不得重複，組數須為 1 至 50。');
-    if (c.drawPrefix !== undefined && (typeof c.drawPrefix !== 'string' || !/^[A-Z]$/.test(c.drawPrefix))) throw new ApiError(400, '抽籤結果字母須為 A 至 Z 的單一大寫英文字母。');
-    const prefix = getDomainCode(c.field, c.drawPrefix);
-    if (prefix && prefixes.has(prefix)) throw new ApiError(400, `抽籤結果字母 ${prefix} 重複，請為各領域設定不同字母。`);
-    if (prefix) prefixes.add(prefix);
+    if (c.code !== undefined && (typeof c.code !== 'string' || !/^[A-Z]$/.test(c.code))) throw new ApiError(400, '領域對應字母須為 A 至 Z 的單一大寫英文字母。');
     if (c.groupCapacities !== undefined) {
       try { validateGroupCapacities(c.groupCapacities, c.groupCount, c.field); }
       catch (error) {
@@ -107,4 +96,6 @@ export function validateDomains(value: unknown): asserts value is DomainConfig[]
     }
     ids.add(c.id); fields.add(c.field);
   }
+  const collision = domainCodeCollisionError(fields, value);
+  if (collision) throw new ApiError(400, collision);
 }

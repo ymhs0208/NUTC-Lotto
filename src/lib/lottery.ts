@@ -1,7 +1,7 @@
 import { ProjectItem, DomainConfig } from '../types';
 import { secureFisherYatesShuffle } from './cryptoRandom';
 
-import { getDomainCode } from './domainCodes';
+import { getDomainCode, getDrawCodeNamespace, domainCodeCollisionError } from './domainCodes';
 import { LotteryAllocationError, validateGroupCapacities } from './groupCapacities';
 export { getDomainCode } from './domainCodes';
 
@@ -40,12 +40,12 @@ export function allocateDomainSubgroups(
   domainField: string,
   evaluatorsPerGroup: Record<number, string[]> = {},
   groupCapacities?: Record<number, number>,
-  drawPrefix?: string
+  code?: string
 ): ProjectItem[] {
   const k = Math.max(1, groupCount);
   const now = new Date().toISOString();
-  const domainPrefix = domainField.slice(0, 4);
-  const domainCode = getDomainCode(domainField, drawPrefix);
+  const domainPrefix = getDrawCodeNamespace(domainField);
+  const domainCode = code ?? getDomainCode(domainField);
   if (groupCapacities !== undefined) {
     validateGroupCapacities(groupCapacities, k, domainField);
     const total = Object.values(groupCapacities).reduce((sum, count) => sum + count, 0);
@@ -120,7 +120,7 @@ export function allocateDomainSubgroups(
     });
   }
 
-  // For each bucket, cryptographically Fisher-Yates shuffle within group to determine final presentation order
+  // For each bucket, cryptographically Fisher-Yates shuffle within group to assign draw codes
   const results: ProjectItem[] = [];
 
   for (let g = 1; g <= k; g++) {
@@ -130,16 +130,15 @@ export function allocateDomainSubgroups(
     const groupEvaluators = evaluatorsPerGroup[g] || [];
 
     internalShuffled.forEach((item, idx) => {
-      const order = idx + 1;
+      const codeNumber = idx + 1;
       // One sequence per domain, continuing across groups to keep codes unique.
       const drawCode = domainCode
         ? `${domainCode}${String(results.length + 1).padStart(2, '0')}`
-        : `${domainPrefix}-第${g}組-序號${String(order).padStart(2, '0')}`;
+        : `${domainPrefix}-第${g}組-序號${String(codeNumber).padStart(2, '0')}`;
 
       results.push({
         ...item,
         assigned_group: g,
-        draw_order: order,
         draw_code: drawCode,
         draw_time: now,
         evaluators: groupEvaluators,
@@ -163,6 +162,8 @@ export function executeAllDomainsIndependentLottery(
   conflictCount: number;
   domainSummaries: { field: string; count: number; groupCount: number }[];
 } {
+  const collision = domainCodeCollisionError([...domainConfigs.map(c => c.field), ...allProjects.map(p => p.field)], domainConfigs);
+  if (collision) throw new LotteryAllocationError(collision);
   const domainMap = new Map(domainConfigs.map(c => [c.field, c]));
 
   // Group projects by field
@@ -188,7 +189,7 @@ export function executeAllDomainsIndependentLottery(
       fieldName,
       evaluatorsPerGroup,
       cfg?.groupCapacities,
-      cfg?.drawPrefix
+      cfg?.code
     );
 
     // Verify conflict of interest

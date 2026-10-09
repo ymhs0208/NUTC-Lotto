@@ -6,7 +6,7 @@ import { sortProjects, type ProjectSortKey } from '../src/lib/projectSort';
 const base: ProjectItem = {
   id: 'a', seq_no: '10', education_system: '', department: '', class_name: '', advisor: '王老師',
   field: '智慧運算', original_code: 'P-10', project_title: '專題10', leader_id: '10',
-  assigned_group: null, draw_order: null, draw_code: null, evaluators: [], password_set: true,
+  assigned_group: null, draw_code: null, evaluators: [], password_set: true,
 };
 const projects: ProjectItem[] = [
   base,
@@ -14,19 +14,6 @@ const projects: ProjectItem[] = [
   { ...base, id: 'c', seq_no: '1', advisor: '陳老師', field: '進修部', original_code: 'P-11', project_title: '專題11', leader_id: '11', assigned_group: 1, draw_code: '第1組-序號11', evaluators: ['陳老師'], password_set: true },
 ];
 const ids = (items: ProjectItem[]) => items.map(item => item.id);
-
-test('within-group order sorts numerically, independent of draw code, with unassigned projects last', () => {
-  const input: ProjectItem[] = [
-    { ...base, id: 'ten', assigned_group: 2, draw_order: 10, draw_code: 'A20' },
-    { ...base, id: 'two', assigned_group: 2, draw_order: 2, draw_code: 'A12' },
-    { ...base, id: 'one', assigned_group: 1, draw_order: 1, draw_code: 'A01' },
-    { ...base, id: 'undrawn' },
-    { ...base, id: 'incomplete', draw_order: 3 },
-  ];
-  assert.deepEqual(ids(sortProjects(input, 'draw_order', 'ascending')), ['one', 'two', 'ten', 'undrawn', 'incomplete']);
-  assert.deepEqual(ids(sortProjects(input, 'draw_order', 'descending')), ['ten', 'two', 'one', 'undrawn', 'incomplete']);
-  assert.deepEqual(ids(input), ['ten', 'two', 'one', 'undrawn', 'incomplete']);
-});
 
 test('roster sorting handles numeric text, undrawn values, status and both directions without changing the source', () => {
   assert.deepEqual(ids(sortProjects(projects, 'seq_no', 'ascending')), ['c', 'b', 'a']);

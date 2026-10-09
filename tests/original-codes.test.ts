@@ -14,11 +14,11 @@ test('original codes use all seven domain letters, resolve duplicates and preser
   const codes = normalizeOriginalCodes(input).map(p => p.original_code);
   assert.deepEqual(codes, fields.flatMap((_, i) => [`${String.fromCharCode(65 + i)}01`, `${String.fromCharCode(65 + i)}02`]));
   assert.equal(input[0].original_code, 'old-1');
-  const stored = { ...project('a', '企業智慧化', 'A03'), password_hash: 'preserved', draw_code: 'A12', draw_order: 2, assigned_group: 3 };
+  const stored = { ...project('a', '企業智慧化', 'A03'), password_hash: 'preserved', draw_code: 'A12', assigned_group: 3 };
   const normalized = normalizeOriginalCodes([stored, { ...stored, id: 'b' }, { ...stored, id: 'c', field: '進修部' }]);
   assert.deepEqual(normalized.map(p => p.original_code), ['A03', 'A01', 'G01']);
   assert.equal(normalized[0].password_hash, 'preserved');
-  assert.equal(normalized[0].draw_order, 2);
+  assert.equal(normalized[0].draw_code, 'A12');
   assert.equal(normalized[0].draw_code, 'A12');
   assert.equal(normalized[0].assigned_group, 3);
 });

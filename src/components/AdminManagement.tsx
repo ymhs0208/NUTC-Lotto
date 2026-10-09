@@ -1,3 +1,4 @@
+import { hasDrawData, isCompleteDrawResult, projectFieldChangeError } from '../lib/drawScope';
 import { formatSessionLabel } from '../lib/sessionLabel';
 import React, { useState, useRef } from 'react';
 import { ProjectItem, DomainStats, DomainConfig } from '../types';
@@ -5,10 +6,12 @@ import { preserveImportedProjectIds } from '../lib/importProjects';
 import { isAdvisorConflict, normalizeProfessorName } from '../lib/lottery';
 import { sortProjects, type ProjectSortKey, type ProjectSortDirection } from '../lib/projectSort';
 import { useModalFocus } from '../lib/useModalFocus';
+import { DataTransfer } from './DataTransfer';
+import { StaffAccounts } from './StaffAccounts';
 import { FloatingNotice } from './FloatingNotice';
 import { ProjectRosterCard } from './ProjectRosterCard';
 import { LotteryTestPanel } from './LotteryTestPanel';
-import { getDomainCode } from '../lib/domainCodes';
+import { getDomainCode, getDrawCodeNamespace, domainCodeCollisionError } from '../lib/domainCodes';
 import { normalizeOriginalCodes } from '../lib/originalCodes';
 import { domainDeletionError } from '../lib/domainDeletion';
 import {
@@ -146,7 +149,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     ? domainDeletionError(projects, domainConfigs, domainConfigs.filter(config => config.id !== domainToDelete.id))
     : null;
   const [domainFormName, setDomainFormName] = useState<string>('');
-  const [domainFormPrefix, setDomainFormPrefix] = useState('');
+  const [domainFormCode, setDomainFormCode] = useState('');
   const [domainFormGroupCount, setDomainFormGroupCount] = useState<number>(2);
   const [domainManualCounts, setDomainManualCounts] = useState(false);
   const [domainCapacityDrafts, setDomainCapacityDrafts] = useState<Record<number, string>>({});
@@ -177,13 +180,13 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
   // Calculate live domain statistics dynamically
   const automaticOriginalCode = React.useMemo(() => {
-    if (!getDomainCode(formData.field || '')) return undefined;
+    if (!getDomainCode(formData.field || '', domainConfigs)) return undefined;
     const candidate = { ...formData, original_code: formData.original_code || '', id: editingProject?.id || '__code_preview__' } as ProjectItem;
     const roster = editingProject
       ? projects.map(p => p.id === editingProject.id ? candidate : p)
       : [...projects, candidate];
-    return normalizeOriginalCodes(roster).find(p => p.id === candidate.id)?.original_code;
-  }, [formData, editingProject, projects]);
+    return normalizeOriginalCodes(roster, domainConfigs).find(p => p.id === candidate.id)?.original_code;
+  }, [formData, editingProject, projects, domainConfigs]);
 
   const statsMap: Record<string, number> = Object.create(null);
   projects.forEach((p) => {
@@ -249,7 +252,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     beginDraft();
     setEditingDomain(null);
     setDomainFormName('');
-    setDomainFormPrefix('ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find(letter => !domainConfigs.some(config => getDomainCode(config.field, config.drawPrefix) === letter)) || '');
+    setDomainFormCode('ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find(code => !domainConfigs.some(c => getDrawCodeNamespace(c.field, domainConfigs) === code)) || '');
     setDomainFormGroupCount(2);
     setDomainManualCounts(false);
     setDomainCapacityDrafts({});
@@ -262,7 +265,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     beginDraft();
     setEditingDomain(cfg);
     setDomainFormName(cfg.field);
-    setDomainFormPrefix(cfg.drawPrefix || getDomainCode(cfg.field) || '');
+    setDomainFormCode(getDomainCode(cfg.field, domainConfigs) || '');
     setDomainFormGroupCount(cfg.groupCount);
     setDomainManualCounts(!!cfg.groupCapacities);
     setDomainCapacityDrafts(Object.fromEntries(Object.entries(cfg.groupCapacities || {}).map(([group, count]) => [group, String(count)])));
@@ -325,16 +328,20 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       setDomainFormError('請輸入領域名稱！');
       return;
     }
-    const drawPrefix = domainFormPrefix || undefined;
-    const effectivePrefix = getDomainCode(cleanName, drawPrefix);
-    if (effectivePrefix && domainConfigs.some(c => c.id !== editingDomain?.id && getDomainCode(c.field, c.drawPrefix) === effectivePrefix)) {
-      setDomainFormError(`抽籤結果字母 ${effectivePrefix} 已被其他領域使用，請選擇不同字母。`);
-      return;
-    }
     if (!Number.isInteger(domainFormGroupCount) || domainFormGroupCount < 1 || domainFormGroupCount > 50) {
       setDomainFormError('分組組數須為 1 至 50 組的整數！');
       return;
     }
+
+    const code = domainFormCode.trim().toUpperCase();
+    const legacyCode = editingDomain && !getDomainCode(editingDomain.field, domainConfigs);
+    if (!/^[A-Z]$/.test(code) && !(legacyCode && !code)) {
+      setDomainFormError('請設定 A 至 Z 的單一英文字母。');
+      return;
+    }
+    const proposed = [...domainConfigs.filter(c => c.id !== editingDomain?.id), { id: editingDomain?.id || '__new__', field: cleanName, groupCount: domainFormGroupCount, ...(code ? { code } : {}) }];
+    const collision = domainCodeCollisionError(proposed.map(c => c.field), proposed);
+    if (collision) { setDomainFormError(collision); return; }
 
     let groupCapacities: Record<number, number> | undefined;
     if (domainManualCounts) {
@@ -365,8 +372,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       const current = domainConfigs.find(c => c.id === editingDomain.id);
       if (!current) throw new Error('此領域已不存在，請重新整理後再操作。');
       const updatedConfigs = domainConfigs.filter(c => c.id !== editingDomain.id);
-      updatedConfigs.splice(domainConfigs.findIndex(c => c.id === editingDomain.id), 0, {
-        ...current, field: cleanName, drawPrefix, groupCount: Number(domainFormGroupCount), groupCapacities,
+      updatedConfigs.push({
+        ...current, field: cleanName, code: code || undefined, groupCount: Number(domainFormGroupCount), groupCapacities,
         evaluatorsPerGroup: Object.fromEntries(Object.entries(current.evaluatorsPerGroup || {})
           .filter(([group]) => /^[1-9]\d*$/.test(group) && Number(group) <= domainFormGroupCount)),
       });
@@ -378,7 +385,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
       setUploadFeedback({
         type: 'success',
-        message: `成功更新領域「${cleanName}」（顯示代碼：${effectivePrefix || '領域名稱'}，組數：${domainFormGroupCount} 組）${
+        message: `成功更新領域「${cleanName}」（組數：${domainFormGroupCount} 組）${
           isRenamed ? `，並同步更新原「${oldName}」之專題資料` : ''
         }！`,
       });
@@ -394,7 +401,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       const newDomain: DomainConfig = {
         id: `domain-${Date.now()}`,
         field: cleanName,
-        drawPrefix,
+        code: code || undefined,
         groupCount: Number(domainFormGroupCount),
         evaluatorsPerGroup: {},
         groupCapacities,
@@ -406,7 +413,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
       setUploadFeedback({
         type: 'success',
-        message: `成功新增專題展覽領域「${cleanName}」（顯示代碼：${effectivePrefix || '領域名稱'}，分組數：${domainFormGroupCount} 組）！`,
+        message: `成功新增專題展覽領域「${cleanName}」（分組數：${domainFormGroupCount} 組）！`,
       });
     }
 
@@ -463,7 +470,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     if (!file || excelActionRef.current) return;
     try {
       await withExcelTools('import', async ({ parseExcelFile }) => {
-        const result = await parseExcelFile(file);
+        const result = await parseExcelFile(file, domainConfigs);
         if (result.success && result.projects) {
           beginDraft();
           setPendingImportProjects(result.projects);
@@ -483,7 +490,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
     let finalProjects: ProjectItem[] = [];
     if (mode === 'overwrite') {
-      if (projects.some(p => p.draw_order) && !overwriteAcknowledged) {
+      if (projects.some(hasDrawData) && !overwriteAcknowledged) {
         setUploadFeedback({ type: 'error', message: '名冊已有抽籤結果，請先勾選確認覆蓋風險。' });
         return;
       }
@@ -508,7 +515,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
   // Export Excel
   const handleExport = () => withExcelTools('export', ({ exportToExcel }) => exportToExcel(projects, '台中科技大學專題展報告抽籤結果'));
-  const handleDownloadTemplate = () => withExcelTools('template', ({ downloadInputTemplate }) => downloadInputTemplate(domainConfigs));
+  const handleDownloadTemplate = () => withExcelTools('template', ({ downloadInputTemplate }) => downloadInputTemplate());
 
   // Confirm project deletion
   const handleConfirmDelete = withSaveFeedback('delete-project', async () => {
@@ -563,6 +570,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
       setFormValidationNotice('請填寫專題名稱與組長學號！');
       return;
     }
+    const changeError = editingProject && projectFieldChangeError(editingProject, formData.field || editingProject.field);
+    if (changeError) { setFormValidationNotice(changeError); return; }
 
     const cleanLeaderId = formData.leader_id.trim();
     const finalPassword = sharedPasswordEnabled ? '' : formData.password || '';
@@ -582,7 +591,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
             leader_id: cleanLeaderId,
             leader_name: formData.leader_name?.trim() || '',
             password: finalPassword,
-            draw_order: formData.draw_code === p.draw_code ? p.draw_order : formData.draw_code ? parseInt(String(formData.draw_code).replace(/\D/g, ''), 10) || p.draw_order : p.draw_order,
           } as ProjectItem;
         }
         return p;
@@ -602,7 +610,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
         leader_id: cleanLeaderId,
         leader_name: formData.leader_name?.trim() || '',
         password: finalPassword,
-        draw_order: formData.draw_code ? parseInt(String(formData.draw_code).replace(/\D/g, ''), 10) || null : null,
         draw_code: formData.draw_code || null,
         draw_time: formData.draw_code ? new Date().toISOString() : null,
       };
@@ -636,6 +643,12 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
     else closeProjectModal();
   });
 
+  const importBusy = !!pendingAction?.startsWith('import-');
+  const importHasDrawData = projects.some(hasDrawData);
+  const importExistingLeaders = new Set(projects.map(p => p.leader_id.trim().toLowerCase()));
+  const importAdditionCount = pendingImportProjects?.filter(p => !importExistingLeaders.has(p.leader_id.trim().toLowerCase())).length ?? 0;
+  const importDuplicateCount = (pendingImportProjects?.length ?? 0) - importAdditionCount;
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 space-y-6">
       {draftIsStale && <div role="alert" className="fixed top-3 left-3 right-3 z-[60] mx-auto max-w-xl rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950 shadow-lg">
@@ -657,6 +670,9 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           </p>
         </div>
       </div>
+
+      <StaffAccounts />
+      <DataTransfer empty={dataVersion === 0 && projects.length === 0} />
 
       {/* Main admin actions */}
       <div className="space-y-4">
@@ -880,7 +896,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
         {domainDisplayMode === 'cards' ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {domainStats.map((stat) => {
-            const drawnCount = projects.filter((p) => p.field === stat.field && p.draw_order).length;
+            const drawnCount = projects.filter((p) => p.field === stat.field && isCompleteDrawResult(p)).length;
             const isSelected = selectedFieldFilter === stat.field;
             const cfgObj = domainConfigs.find((c) => c.id === stat.id) || {
               id: stat.id,
@@ -900,7 +916,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-xs font-medium text-slate-500">代碼</span>
-                  <span className="text-xs font-bold tabular-nums text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || cfgObj.field.slice(0, 4)}</span>
+                  <span className="text-xs font-bold tabular-nums text-slate-600">{getDrawCodeNamespace(stat.field, domainConfigs)}</span>
                 </div>
                 {/* Header: Title & Group Count */}
                 <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-100">
@@ -986,24 +1002,24 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
           })}
         </div>
         ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[850px] text-left text-xs sm:text-sm border-collapse">
+        <div className="min-w-0 max-w-full overflow-x-auto">
+          <table className="w-full min-w-[850px] whitespace-nowrap text-left text-xs sm:text-sm border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-xs">
                 <th className="py-2.5 px-4 text-center border border-slate-200 whitespace-nowrap">代碼</th>
                 <th className="py-2.5 px-4 border border-slate-200">列標籤 (領域名稱)</th>
                 <th className="py-2.5 px-4 text-center border border-slate-200">件數</th>
-                <th className="py-2.5 px-4 text-center border border-slate-200">
+                <th className="min-w-24 py-2.5 px-4 text-center border border-slate-200 whitespace-nowrap">
                   分組組數
                 </th>
                 <th className="py-2.5 px-4 border border-slate-200">各組評審委員名單</th>
-                <th className="py-2.5 px-4 text-center border border-slate-200">抽籤進度</th>
+                <th className="py-2.5 px-4 text-center border border-slate-200 whitespace-nowrap">抽籤進度</th>
                 <th className="py-2.5 px-4 text-right border border-slate-200">管理操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {domainStats.map((stat) => {
-                const drawnCount = projects.filter((p) => p.field === stat.field && p.draw_order).length;
+                const drawnCount = projects.filter((p) => p.field === stat.field && isCompleteDrawResult(p)).length;
                 const isSelected = selectedFieldFilter === stat.field;
                 const cfgObj = domainConfigs.find((c) => c.id === stat.id) || {
                   id: stat.id,
@@ -1020,7 +1036,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     }`}
                   >
                     <td className="py-2 px-4 text-center border border-slate-200 whitespace-nowrap">
-                      <span className="text-xs font-bold tabular-nums text-slate-600">{getDomainCode(cfgObj.field, cfgObj.drawPrefix) || cfgObj.field.slice(0, 4)}</span>
+                      <span className="text-xs font-bold tabular-nums text-slate-600">{getDrawCodeNamespace(stat.field, domainConfigs)}</span>
                     </td>
                     <td className="py-2 px-4 text-slate-800 border border-slate-200">
                       <span className="font-semibold text-slate-900">{stat.field}</span>
@@ -1028,9 +1044,9 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     <td className="py-2 px-4 text-center font-mono font-bold text-slate-900 border border-slate-200">
                       {stat.count}
                     </td>
-                    <td className="py-2 px-4 text-center border border-slate-200">
-                      <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 font-bold text-slate-800" aria-label={`${stat.field}分組組數 ${stat.groupCount} 組`}>
-                        {stat.groupCount} 組
+                    <td className="py-2 px-4 text-center border border-slate-200 whitespace-nowrap">
+                      <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 font-bold text-slate-800" aria-label={`${stat.field}分組組數 ${stat.groupCount} 組`}>
+                        {`${stat.groupCount} 組`}
                       </span>
                     </td>
                     <td className="py-2 px-4 border border-slate-200 max-w-xs">
@@ -1051,15 +1067,15 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                         })}
                       </div>
                     </td>
-                    <td className="py-2 px-4 text-center border border-slate-200">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-mono font-medium ${
+                    <td className="py-2 px-4 text-center border border-slate-200 whitespace-nowrap">
+                      <span className={`inline-flex shrink-0 items-center whitespace-nowrap text-xs px-2 py-0.5 rounded-full font-mono font-medium ${
                         drawnCount === stat.count && stat.count > 0
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                           : drawnCount > 0
                           ? 'bg-amber-50 text-amber-700 border border-amber-200'
                           : 'text-slate-400'
                       }`}>
-                        {drawnCount} / {stat.count}
+                        {`${drawnCount} / ${stat.count}`}
                       </span>
                     </td>
                     <td className="py-2 px-4 text-right border border-slate-200 whitespace-nowrap">
@@ -1101,14 +1117,14 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                 <td className="py-2.5 px-4 text-center font-mono text-rose-700 text-sm border border-slate-200">
                   {totalProjectsCount}
                 </td>
-                <td className="py-2.5 px-4 text-center font-mono text-slate-900 text-sm border border-slate-200">
-                  {totalGroupCount} 組
+                <td className="py-2.5 px-4 text-center whitespace-nowrap font-mono text-slate-900 text-sm border border-slate-200">
+                  {`${totalGroupCount} 組`}
                 </td>
                 <td className="py-2.5 px-4 text-xs text-slate-500 border border-slate-200">
                   全校共 {totalGroupCount} 個分組場次
                 </td>
                 <td className="py-2.5 px-4 text-center font-mono text-emerald-700 text-xs border border-slate-200">
-                  {projects.filter((p) => p.draw_order).length} / {totalProjectsCount}
+                  {projects.filter(isCompleteDrawResult).length} / {totalProjectsCount}
                 </td>
                 <td className="py-2.5 px-4 text-right text-xs text-slate-500 border border-slate-200">
                   {selectedFieldFilter !== 'ALL' && (
@@ -1268,9 +1284,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                 <thead className="sticky top-0 bg-slate-100/90 text-slate-700 z-10 border-b border-slate-200">
                   <tr className="text-xs font-semibold">
                     {sortableHeader('seq_no', '序號')}
-                    {sortableHeader('draw_code', '+編號(抽籤後)')}
+                    {sortableHeader('draw_code', '編號(抽籤後)')}
                     {sortableHeader('assigned_group', '分組場次')}
-                    {sortableHeader('draw_order', '組內順序')}
                     {sortableHeader('evaluators', '評審委員')}
                     {sortableHeader('field', '領域')}
                     {sortableHeader('original_code', '編號')}
@@ -1285,7 +1300,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                 <tbody className="divide-y divide-slate-100">
                   {filteredProjects.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="py-12 text-center text-slate-400">
+                      <td colSpan={12} className="py-12 text-center text-slate-400">
                         <div className="space-y-1">
                           <p className="font-medium text-slate-600 text-sm">
                             {projects.length === 0
@@ -1342,13 +1357,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                               </span>
                             ) : (
                               <span className="text-slate-400 italic text-xs">待分配</span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 whitespace-nowrap font-medium">
-                            {p.draw_order ? (
-                              <span className="text-slate-800 tabular-nums">第 {p.draw_order} 位</span>
-                            ) : (
-                              <span className="text-slate-400 italic text-xs">待抽籤</span>
                             )}
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap text-xs">
@@ -1584,14 +1592,14 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
               <div>
                 <label htmlFor="domain-code" className="block text-slate-700 mb-1 font-semibold">對應字母</label>
-                <select id="domain-code" value={domainFormPrefix}
-                  onChange={e => { setDomainFormPrefix(e.target.value); setDomainFormError(null); }}
-                  disabled={!!editingDomain && projects.some(p => p.field === editingDomain.field && (p.draw_code || p.draw_order || p.assigned_group || p.draw_time))}
+                <select id="domain-code" value={domainFormCode}
+                  onChange={e => { setDomainFormCode(e.target.value); setDomainFormError(null); }}
+                  disabled={!!editingDomain && projects.some(p => p.field === editingDomain.field && (hasDrawData(p)))}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 disabled:opacity-60">
-                  <option value="">{editingDomain && !getDomainCode(editingDomain.field, editingDomain.drawPrefix) ? `沿用既有代碼（${editingDomain.field.slice(0, 4)}）` : '請選擇字母'}</option>
+                  <option value="">{editingDomain && !getDomainCode(editingDomain.field, domainConfigs) ? `沿用既有代碼（${getDrawCodeNamespace(editingDomain.field, domainConfigs)}）` : '請選擇字母'}</option>
                   {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => <option key={letter} value={letter}>{letter}（{letter}01、{letter}02…）</option>)}
                 </select>
-                <p className="text-[11px] text-slate-500 mt-1">抽籤後編號使用此字母，各領域不可重複。已有抽籤結果時須先重設才能修改。</p>
+                <p className="text-[11px] text-slate-500 mt-1">原始編號與抽籤後編號使用此字母，各領域不可重複。已有抽籤結果時須先重設才能修改。</p>
               </div>
 
               <div>
@@ -1674,41 +1682,40 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
       {/* Modal for Deleting Domain Confirmation */}
       {domainToDelete && (
-        <div role="dialog" aria-modal="true" aria-label="確認刪除展覽領域" className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
-                <Trash2 className="w-5 h-5" />
+        <div role="dialog" aria-modal="true" aria-labelledby="delete-domain-title" aria-describedby="delete-domain-description" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 backdrop-blur-xs sm:p-6">
+          <div className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:rounded-3xl">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:px-6 sm:py-5">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600" aria-hidden="true"><Trash2 className="h-5 w-5" /></span>
+                <div className="min-w-0">
+                  <h3 id="delete-domain-title" className="text-lg font-black leading-snug text-slate-900 sm:text-xl">確定刪除此展覽領域？</h3>
+                  <p id="delete-domain-description" className="mt-1 text-sm leading-relaxed text-slate-500">請確認領域與專題移轉資訊。</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">確定刪除此展覽領域？</h3>
-                <p className="text-xs text-slate-600 mt-1">
-                  領域：「<strong className="text-slate-900">{domainToDelete.field}</strong>」
-                </p>
+              <button type="button" onClick={() => setDomainToDelete(null)} disabled={pendingAction === 'delete-domain'} aria-label="關閉刪除領域確認" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"><X className="h-5 w-5" /></button>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-medium text-slate-500">即將刪除的領域</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <p className="min-w-0 break-words text-lg font-black text-slate-900">{domainToDelete.field}</p>
+                </div>
                 {domainDeleteBlockedMessage ? (
-                  <p role="alert" className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs leading-relaxed text-rose-700">{domainDeleteBlockedMessage}</p>
-                ) : statsMap[domainToDelete.field] > 0 && (
-                  <p className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200 mt-2 leading-relaxed">
-                    ⚠️ 注意：名冊內尚有 {statsMap[domainToDelete.field]} 筆專題屬於此領域，刪除後將移至「{domainConfigs.find(config => config.id !== domainToDelete.id)?.field || '未分類領域'}」。
-                  </p>
-                )}
+                  <div role="alert" className="flex items-start gap-2 text-sm leading-relaxed text-rose-800">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <p className="min-w-0 break-words">{domainDeleteBlockedMessage}</p>
+                  </div>
+                ) : statsMap[domainToDelete.field] > 0 ? (
+                  <p className="break-words text-sm leading-7 text-slate-600">刪除後，這 {statsMap[domainToDelete.field]} 筆專題將移至「<strong className="font-bold text-amber-800">{domainConfigs.find(config => config.id !== domainToDelete.id)?.field || '未分類領域'}</strong>」。</p>
+                ) : <p className="text-sm leading-relaxed text-slate-500">此領域目前沒有專題，刪除後將移除領域設定。</p>}
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                onClick={() => setDomainToDelete(null)}
-                disabled={pendingAction === 'delete-domain'}
-                className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs cursor-pointer"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleConfirmDeleteDomain}
-                disabled={pendingAction === 'delete-domain' || !!domainDeleteBlockedMessage}
-                className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-rose-700 disabled:opacity-60 cursor-pointer"
-              >
-                {pendingAction === 'delete-domain' && <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+            <div className="flex shrink-0 flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+              <button type="button" onClick={() => setDomainToDelete(null)} disabled={pendingAction === 'delete-domain'} className="min-h-11 rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">取消</button>
+              <button type="button" onClick={handleConfirmDeleteDomain} disabled={pendingAction === 'delete-domain' || !!domainDeleteBlockedMessage} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-rose-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">
+                {pendingAction === 'delete-domain' && <LoaderCircle className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
                 {pendingAction === 'delete-domain' ? '刪除中…' : '確定刪除領域'}
               </button>
             </div>
@@ -1718,54 +1725,60 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
       {/* In-App Modal for Excel Import Decision */}
       {pendingImportProjects && (
-        <div role="dialog" aria-modal="true" aria-label="選擇名冊匯入模式" className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-xl space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
-                <Upload className="w-5 h-5" />
+        <div role="dialog" aria-modal="true" aria-labelledby="import-dialog-title" aria-describedby="import-dialog-description" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 backdrop-blur-xs sm:p-6">
+          <div className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:rounded-3xl">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:px-6 sm:py-5">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600" aria-hidden="true"><CheckCircle2 className="h-6 w-6" /></span>
+                <div className="min-w-0">
+                  <h3 id="import-dialog-title" className="text-lg font-black leading-snug text-slate-900 sm:text-xl">名冊解析成功</h3>
+                  <p id="import-dialog-description" className="mt-1 text-sm leading-relaxed text-slate-500">已讀取 {pendingImportProjects.length} 筆專題。點選下方其中一個按鈕，即會開始匯入。</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  成功解析 {pendingImportProjects.length} 筆專題名冊
-                </h3>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  請選擇匯入模式：您可以選擇完全覆蓋現有名單，或是將新名單追加至現有名單之後。
-                </p>
-                <p className="text-xs text-blue-700 mt-2">已讀取分組場次：{pendingImportProjects.filter(project => project.assigned_group != null).length}／{pendingImportProjects.length} 筆。</p>
-                {sharedPasswordEnabled && <p className="text-xs text-indigo-700 mt-2">共用密碼啟用中，匯入檔案內的個別密碼欄位會略過；新專題沿用目前共用密碼。</p>}
-                {projects.some(p => p.draw_order) && <label className="mt-3 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-                  <input type="checkbox" checked={overwriteAcknowledged} onChange={e => setOverwriteAcknowledged(e.target.checked)} className="mt-0.5 shrink-0" />
-                  <span>我了解「完全覆蓋」會以 Excel 內容取代現有名冊，可能清除或改變已完成的抽籤結果。需要保留現有結果時，請使用「追加」。</span>
-                </label>}
+              <button type="button" onClick={() => setPendingImportProjects(null)} disabled={importBusy} aria-label="關閉名冊匯入" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"><X className="h-5 w-5" /></button>
+            </div>
+
+            <div className="min-h-0 space-y-4 overflow-y-auto px-5 py-5 sm:px-6">
+              <dl className="grid grid-cols-2 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="min-w-0"><dt className="text-xs font-medium text-slate-500">目前名冊</dt><dd className="mt-1 text-2xl font-black tabular-nums text-slate-800">{projects.length}<span className="ml-1 text-sm font-medium text-slate-500">筆</span></dd></div>
+                <div className="min-w-0 border-l border-slate-200 pl-4"><dt className="text-xs font-medium text-slate-500">本次讀取</dt><dd className="mt-1 text-2xl font-black tabular-nums text-blue-700">{pendingImportProjects.length}<span className="ml-1 text-sm font-medium text-slate-500">筆</span></dd></div>
+              </dl>
+
+              {sharedPasswordEnabled && <div className="flex items-start gap-2.5 rounded-xl border border-indigo-200 bg-indigo-50 p-3.5 text-sm text-indigo-900"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><div className="min-w-0"><p className="font-bold">共用密碼啟用中</p><p className="mt-1 break-words text-xs leading-relaxed text-indigo-700">Excel 內的個別密碼會略過，新專題沿用目前的共用密碼。</p></div></div>}
+
+              {importHasDrawData && <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-950">
+                <input type="checkbox" checked={overwriteAcknowledged} disabled={importBusy} onChange={e => setOverwriteAcknowledged(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-amber-600" />
+                <span className="min-w-0"><span className="block font-bold">確認覆蓋既有抽籤結果</span><span className="mt-1 block break-words text-xs leading-relaxed text-amber-800">我了解完全覆蓋可能清除或改變現有結果。需保留既有資料時，請選擇「追加名冊」。</span></span>
+              </label>}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex min-w-0 flex-col rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                  <h4 className="flex items-center gap-2 text-sm font-bold text-rose-800"><FileSpreadsheet className="h-4 w-4 shrink-0" aria-hidden="true" />完全覆蓋</h4>
+                  <p className="mt-2 break-words text-xs leading-relaxed text-rose-700">以本次 Excel 取代現有名冊，匯入後共 {pendingImportProjects.length} 筆。</p>
+                  {importHasDrawData && !overwriteAcknowledged && <p className="mt-2 text-xs font-semibold text-rose-800">請先勾選上方覆蓋確認。</p>}
+                  <div className="mt-auto pt-4">
+                    <button type="button" onClick={() => handleApplyImport('overwrite')} disabled={importBusy || (importHasDrawData && !overwriteAcknowledged)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-3 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-rose-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">
+                      {pendingAction === 'import-overwrite' && <LoaderCircle className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                      {pendingAction === 'import-overwrite' ? '正在覆蓋匯入…' : '覆蓋並匯入'}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex min-w-0 flex-col rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                  <h4 className="flex items-center gap-2 text-sm font-bold text-blue-800"><Plus className="h-4 w-4 shrink-0" aria-hidden="true" />追加名冊</h4>
+                  <p className="mt-2 break-words text-xs leading-relaxed text-blue-700">保留現有資料，新增 {importAdditionCount} 筆，匯入後共 {projects.length + importAdditionCount} 筆。</p>
+                  {importDuplicateCount > 0 && <p className="mt-2 text-xs leading-relaxed text-blue-800">{importDuplicateCount} 筆學號已存在，會略過。</p>}
+                  <div className="mt-auto pt-4">
+                    <button type="button" onClick={() => handleApplyImport('append')} disabled={importBusy} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">
+                      {pendingAction === 'import-append' && <LoaderCircle className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                      {pendingAction === 'import-append' ? '正在追加匯入…' : '追加並匯入'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="pt-2 flex flex-col gap-2">
-              <button
-                onClick={() => handleApplyImport('overwrite')}
-                disabled={pendingAction?.startsWith('import-') || (projects.some(p => p.draw_order) && !overwriteAcknowledged)}
-                className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {pendingAction === 'import-overwrite' && <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-                <span>{pendingAction === 'import-overwrite' ? '匯入中…' : '完全覆蓋並替換現有名單'}</span>
-              </button>
-
-              <button
-                onClick={() => handleApplyImport('append')}
-                disabled={pendingAction?.startsWith('import-')}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs border border-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                {pendingAction === 'import-append' && <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-                <span>{pendingAction === 'import-append' ? '匯入中…' : '追加至現有名冊 (保留現有資料)'}</span>
-              </button>
-
-              <button
-                onClick={() => setPendingImportProjects(null)}
-                disabled={pendingAction?.startsWith('import-')}
-                className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs transition-colors cursor-pointer"
-              >
-                取消匯入
-              </button>
+            <div className="flex shrink-0 justify-end border-t border-slate-200 bg-slate-50 px-5 py-3 sm:px-6">
+              <button type="button" onClick={() => setPendingImportProjects(null)} disabled={importBusy} className="min-h-11 rounded-xl border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">取消匯入</button>
             </div>
           </div>
         </div>
@@ -1773,35 +1786,29 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
 
       {/* In-App Modal for Delete Project Confirmation */}
       {projectToDelete && (
-        <div role="dialog" aria-modal="true" aria-label="確認刪除專題" className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-sm w-full p-6 shadow-xl space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
-                <Trash2 className="w-5 h-5" />
+        <div role="dialog" aria-modal="true" aria-labelledby="delete-project-title" aria-describedby="delete-project-description" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 backdrop-blur-xs sm:p-6">
+          <div className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:rounded-3xl">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:px-6 sm:py-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600" aria-hidden="true"><Trash2 className="h-5 w-5" /></span>
+                <h3 id="delete-project-title" className="min-w-0 text-lg font-black leading-snug text-slate-900 sm:text-xl">確定刪除此專題？</h3>
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">確定刪除此專題？</h3>
-                <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                  「{projectToDelete.title}」
-                </p>
+              <button type="button" onClick={() => setProjectToDelete(null)} disabled={pendingAction === 'delete-project'} aria-label="關閉刪除專題確認" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"><X className="h-5 w-5" /></button>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-medium text-slate-500">即將刪除的專題</p>
+                <p className="break-words text-lg font-bold leading-relaxed text-slate-900">{projectToDelete.title}</p>
+                <p id="delete-project-description" className="text-sm leading-relaxed text-slate-500">刪除後，此專題將從名冊移除。</p>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                onClick={() => setProjectToDelete(null)}
-                disabled={pendingAction === 'delete-project'}
-                className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs cursor-pointer"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                disabled={pendingAction === 'delete-project'}
-                className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-rose-700 disabled:opacity-60 cursor-pointer"
-              >
-                {pendingAction === 'delete-project' && <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-                {pendingAction === 'delete-project' ? '刪除中…' : '確認刪除'}
+            <div className="flex shrink-0 flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+              <button type="button" onClick={() => setProjectToDelete(null)} disabled={pendingAction === 'delete-project'} className="min-h-11 rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">取消</button>
+              <button type="button" onClick={handleConfirmDelete} disabled={pendingAction === 'delete-project'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-rose-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">
+                {pendingAction === 'delete-project' && <LoaderCircle className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                {pendingAction === 'delete-project' ? '刪除中…' : '確定刪除專題'}
               </button>
             </div>
           </div>
@@ -1886,7 +1893,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>
-                <div>
+                <div className="min-w-0 sm:col-span-2">
                   <label htmlFor="project-password" className="mb-1 block font-semibold text-slate-700">設定／重設組長密碼</label>
                   <input
                     id="project-password"
@@ -1899,7 +1906,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     autoComplete="new-password"
                     minLength={8}
                     maxLength={128}
-                    className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-h-11 min-w-0 w-full max-w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                   <p id="project-password-help" className="mt-1.5 text-xs leading-relaxed text-slate-500">
                     {sharedPasswordEnabled ? '目前使用全體共用密碼，無法單獨設定。' : editingProject ? '留空會保留目前密碼；輸入新密碼則會重設。' : '可先留空，之後再設定個別密碼。'}
@@ -1919,6 +1926,8 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                 <select
                   id="project-field"
                   value={formData.field || domainList[0]}
+                  disabled={!!editingProject && hasDrawData(editingProject)}
+                  aria-describedby="project-field-help"
                   onChange={(e) => setFormData({ ...formData, field: e.target.value })}
                   className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
@@ -1926,6 +1935,11 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                     <option key={f} value={f}>{f}</option>
                   ))}
                 </select>
+                <p id="project-field-help" className="mt-1 text-xs text-slate-500">
+                  {editingProject && hasDrawData(editingProject)
+                    ? `已有抽籤資料，請先在抽籤現場重設「${editingProject.field}」領域，再修改專題領域。`
+                    : '尚未抽籤或已重設結果的專題可變更領域。'}
+                </p>
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1996,7 +2010,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                 </div>
 
               <div>
-                <label htmlFor="project-draw-code" className="block text-slate-700 mb-1 font-semibold">+編號(抽籤後)</label>
+                <label htmlFor="project-draw-code" className="block text-slate-700 mb-1 font-semibold">編號(抽籤後)</label>
                 <input
                   id="project-draw-code"
                   type="text"

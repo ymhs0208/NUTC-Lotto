@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutGrid, RefreshCw, Table2 } from 'lucide-react';
 import type { PublicDrawResult, PublicResultsResponse } from '../types';
 import { useApiRequest } from '../lib/useApiRequest';
-import { isRequestCancelled } from '../lib/api';
+import { isApiRequestCancelled } from '../lib/api';
 import { formatSessionLabel } from '../lib/sessionLabel';
 
 export function PublicResults() {
@@ -57,7 +57,7 @@ export function PublicResults() {
         if (field && !result.domains.includes(field)) selectField('');
       })
       .catch(reason => {
-        if (selectedField.current === field && !isRequestCancelled(reason)) setError(reason instanceof Error ? reason.message : '抽籤結果暫時無法載入，請稍後再試。');
+        if (selectedField.current === field && !isApiRequestCancelled(reason)) setError(reason instanceof Error ? reason.message : '抽籤結果暫時無法載入，請稍後再試。');
       })
       .finally(() => { if (!controller.signal.aborted && selectedField.current === field) setLoading(false); });
     return () => controller.abort();

@@ -9,13 +9,12 @@ export interface ProjectItem {
   original_code: string; // 原始編號 e.g. A01，依領域自動編號
   project_title: string; // 專題名稱
   leader_id: string; // 組長學號
-  leader_name?: string; // 組長姓名（舊名冊可不提供）
+  leader_name?: string; // 組長姓名；舊名冊可未提供
   password?: string; // 僅供設定新密碼的輸入，API 不回傳
   password_set?: boolean; // 管理員可查看是否已設定密碼
   
   // 抽籤產生的結果
   assigned_group?: number | null; // 分組場次/組別 (第 1 組、第 2 組...)
-  draw_order?: number | null; // 組內報告順序 (1, 2, 3...)
   draw_code?: string | null; // 抽籤後編號 e.g. "A01"，領域內跨組連續編號
   draw_time?: string | null; // 抽籤時間戳記
   evaluators?: string[]; // 負責評分的教授名單 (符合利益迴避)
@@ -29,25 +28,36 @@ export interface DomainStats {
 
 export interface DomainConfig {
   id: string;
+  code?: string; // 管理員指定 A-Z；舊設定未指定時沿用原有代碼
   field: string;
-  drawPrefix?: string; // 自訂抽籤結果英文字母；未設定沿用領域預設值
   groupCount: number; // 評審分組組數
   groupCapacities?: Record<number, number>; // 指定各組專題件數；未設定沿用自動分組
   evaluatorsPerGroup?: Record<number, string[]>; // 每一個分組 (1..N) 的評分教授清單
 }
 
-export type ViewMode = 'student' | 'stage' | 'admin' | 'logs' | 'results';
+export type ViewMode = 'student' | 'results' | 'stage' | 'admin' | 'audit';
 
-// Explicit public result contract; no student or staff credentials.
 export interface PublicDrawResult {
-  leader_name?: string; // 僅提供已公布專題的組長姓名
   draw_code: string;
   assigned_group: number | null;
   project_title: string;
+  leader_name: string;
 }
 
 export interface PublicResultsResponse {
+  version?: number;
   domains: string[];
   results: PublicDrawResult[];
-  version?: number;
+}
+
+// Student results expose only fields consumed by the query page.
+export interface StudentQueryProject {
+  leader_id_masked: string;
+  project_title: string;
+  field: string;
+  isDrawn: boolean;
+  draw_code: string | null;
+  assigned_group?: number | null;
+  draw_time?: string | null;
+  evaluators?: string[];
 }

@@ -4,10 +4,10 @@
  */
 
 import { sortDomainConfigs } from './lib/domainCodes';
+import { useApiRequest } from './lib/useApiRequest';
 import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { ProjectItem, ViewMode, DomainConfig } from './types';
-import { isRequestCancelled, StoreState } from './lib/api';
-import { useApiRequest } from './lib/useApiRequest';
+import { StoreState, ApiRequestError, isApiRequestCancelled } from './lib/api';
 import { Navbar } from './components/Navbar';
 import { StudentPortal } from './components/StudentPortal';
 import { AuthGate } from './components/AuthGate';
@@ -25,12 +25,12 @@ import { getViewFromLocation, canonicalPageUrl, viewPath, viewTitles } from './l
 const PublicResults = lazy(() => import('./components/PublicResults').then(module => ({ default: module.PublicResults })));
 const StageLottery = lazy(() => import('./components/StageLottery').then(module => ({ default: module.StageLottery })));
 const AdminManagement = lazy(() => import('./components/AdminManagement').then(module => ({ default: module.AdminManagement })));
-const StaffLogs = lazy(() => import('./components/StaffLogs').then(module => ({ default: module.StaffLogs })));
+
+const StaffAudit = lazy(() => import('./components/StaffAudit').then(module => ({ default: module.StaffAudit })));
 
 export default function App() {
+  const request = useApiRequest();
   const [currentView, setCurrentView] = useState<ViewMode>(() => getViewFromLocation(window.location));
-  const request = useApiRequest(currentView);
-  const loadControllerRef = useRef<AbortController | null>(null);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [domainConfigs, setDomainConfigs] = useState<DomainConfig[]>([]);
@@ -38,25 +38,31 @@ export default function App() {
   const [dataVersion, setDataVersion] = useState<number | null>(null);
   const dataVersionRef = useRef<number | null>(null);
   const loadRequestIdRef = useRef(0);
+  const loadControllerRef = useRef<AbortController | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
   const [authSession, setAuthSession] = useState<AuthSession | null>(() => getAuthSession());
 
   const [authReady, setAuthReady] = useState(false);
   useEffect(() => {
-    if (currentView === 'results') { setAuthReady(true); return; }
+    if (getViewFromLocation(window.location) === 'results') { setAuthReady(true); return; }
     let active = true;
-    request<{ session: AuthSession }>('/api/auth/me').then(data => {
+    const controller = new AbortController();
+    request<{ session: AuthSession }>('/api/auth/me', undefined, { signal: controller.signal }).then(data => {
       if (active) { saveAuthSession(data.session); setAuthSession(data.session); }
-    }).catch(() => {}).finally(() => { if (active) setAuthReady(true); });
-    return () => { active = false; };
+    }).catch(error => {
+      if (active && !isApiRequestCancelled(error) && !(error instanceof ApiRequestError && error.status === 401) && getViewFromLocation(window.location) !== 'student') {
+        setDataError(error instanceof Error ? error.message : '確認登入狀態失敗，請稍後再試。');
+      }
+    }).finally(() => { if (active) setAuthReady(true); });
+    return () => { active = false; controller.abort(); };
   }, [request]);
 
   // Handle staff/admin logout
   const handleLogout = useCallback(async () => {
     try { await request('/api/auth/logout', {}); }
-    catch (error) { if (!isRequestCancelled(error)) setDataError(error instanceof Error ? error.message : '登出失敗，請重試'); return; }
-    loadControllerRef.current?.abort();
+    catch (error) { setDataError(error instanceof Error ? error.message : '登出失敗，請重試'); return; }
     clearAuthSession();
+    loadControllerRef.current?.abort();
     loadRequestIdRef.current++;
     setAuthSession(null);
     setProjects([]);
@@ -112,7 +118,7 @@ export default function App() {
     const controller = new AbortController();
     loadControllerRef.current = controller;
     const requestId = ++loadRequestIdRef.current;
-    if (!getAuthSession() || currentView === 'logs' || currentView === 'results') {
+    if (currentView === 'results' || !getAuthSession()) {
       setProjects([]);
       setDomainConfigs([]);
       setSharedPasswordEnabled(false);
@@ -122,12 +128,13 @@ export default function App() {
       setIsLoading(false);
       return;
     }
+    if (currentView === 'audit') { setIsLoading(false); return; }
     setIsLoading(true);
     try {
       const state = await request<StoreState>('/api/state', undefined, { signal: controller.signal });
       if (requestId === loadRequestIdRef.current && getAuthSession()) applyState(state);
     } catch (error) {
-      if (!isRequestCancelled(error) && requestId === loadRequestIdRef.current) setDataError(error instanceof Error ? error.message : '資料載入失敗');
+      if (requestId === loadRequestIdRef.current && !isApiRequestCancelled(error)) setDataError(error instanceof Error ? error.message : '資料載入失敗');
     } finally {
       if (requestId === loadRequestIdRef.current) setIsLoading(false);
     }
@@ -145,7 +152,7 @@ export default function App() {
       if (dataVersion === null) throw new Error('資料尚未載入，請重新整理。');
       applyState(await request('/api/projects', { projects: updated, version: dataVersion }));
     } catch (error) {
-      if (!isRequestCancelled(error)) setDataError(error instanceof Error ? error.message : '儲存失敗');
+      setDataError(error instanceof Error ? error.message : '儲存失敗');
       throw error;
     }
   };
@@ -165,7 +172,7 @@ export default function App() {
       if (dataVersion === null) throw new Error('資料尚未載入，請重新整理。');
       applyState(await request('/api/domain-configs', { domainConfigs: newConfigs, renamedField, version: dataVersion }));
     } catch (error) {
-      if (!isRequestCancelled(error)) setDataError(error instanceof Error ? error.message : '儲存失敗');
+      setDataError(error instanceof Error ? error.message : '儲存失敗');
       throw error;
     }
   };
@@ -188,7 +195,7 @@ export default function App() {
 
       {/* Main Content Viewport */}
       <main id="main-content" tabIndex={-1} className="flex-1 pb-16">
-        <span className="sr-only" aria-live="polite">{currentView === 'results' ? '各領域抽籤結果' : currentView === 'student' ? '專題報告場次查詢' : currentView === 'stage' ? '專題報告抽籤現場' : '管理後台'}</span>
+        <span className="sr-only" aria-live="polite">{currentView === 'results' ? '各領域抽籤結果' : currentView === 'student' ? '專題報告場次查詢' : currentView === 'stage' ? '專題報告抽籤現場' : currentView === 'audit' ? '工作人員操作紀錄' : '管理後台'}</span>
         {dataError && (
           <FloatingNotice
             type="error"
@@ -198,7 +205,7 @@ export default function App() {
             onAction={() => void loadData()}
           />
         )}
-        {isLoading && currentView !== 'student' && currentView !== 'results' ? (
+        {isLoading && currentView !== 'student' && currentView !== 'results' && currentView !== 'audit' ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
             <div className="w-9 h-9 border-3 border-rose-100 border-t-rose-600 rounded-full animate-spin" />
             <p className="text-slate-500 text-xs">載入專題名冊與抽籤資料中...</p>
@@ -229,11 +236,12 @@ export default function App() {
               )
             )}
 
-            {currentView === 'logs' && (
-              !hasPermissionForView(authSession?.role || null, 'logs')
-                ? <AuthGate targetView="admin" onSuccess={setAuthSession} />
-                : <StaffLogs />
+            {currentView === 'audit' && (
+              !hasPermissionForView(authSession?.role || null, 'audit') ? (
+                <AuthGate targetView="admin" onSuccess={setAuthSession} />
+              ) : <StaffAudit />
             )}
+
             {currentView === 'admin' && (
               !hasPermissionForView(authSession?.role || null, 'admin') ? (
                 <AuthGate

@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { buildResultSlides } from '../src/lib/resultPresentation';
 import type { ProjectItem, DomainConfig } from '../src/types';
 const domains = [{ field: 'B' }, { field: 'A' }] as DomainConfig[];
-const item = (id: string, field: string, group: number | null, order: number | null) => ({ id, field, assigned_group: group, draw_order: order, project_title: id } as ProjectItem);
+const item = (id: string, field: string, group: number | null, order: number | null) => ({ id, field, assigned_group: group, draw_code: order != null && order > 0 ? `${field}${order}` : null, project_title: id } as ProjectItem);
 
-test('presentation follows configured domains, numeric groups and report order without changing input', () => {
+test('presentation follows configured domains, numeric groups and numeric draw codes without changing input', () => {
   const projects = [item('a', 'A', 1, 1), item('b10', 'B', 10, 1), item('b2', 'B', 2, 2), item('b1', 'B', 2, 1), item('pending', 'B', null, null), item('extra', 'C', 1, 1)];
   const original = JSON.stringify(projects);
   const slides = buildResultSlides(projects, domains, 'ALL', 1);
@@ -28,7 +28,7 @@ test('614 projects in 19 groups appear exactly once at every supported viewport 
     for (const slide of slides) {
       assert.ok(slide.items.length <= size);
       assert.ok(slide.items.every((p) => p.field === slide.field && p.assigned_group === slide.group));
-      assert.deepEqual(slide.items.map((p) => p.draw_order), slide.items.map((p) => p.draw_order).sort((a, b) => a! - b!));
+      assert.deepEqual(slide.items.map((p) => p.draw_code!), slide.items.map((p) => p.draw_code!).sort(new Intl.Collator('zh-TW', { numeric: true }).compare));
     }
   }
 });

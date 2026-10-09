@@ -4,19 +4,19 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --ip 127.0.0.1 --port 3000 --local-protocol https",
+    "dev": "node scripts/start-server.mjs",
     "build": "vite build",
-    "start": "wrangler dev --ip 127.0.0.1 --port 3000 --local-protocol https",
+    "start": "node scripts/start-server.mjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
-    "accounts:setup": "tsx scripts/setup-staff.ts",
-    "dev:cloudflare": "wrangler dev --ip 127.0.0.1 --port 3000 --local-protocol https",
-    "deploy": "wrangler deploy",
-    "deploy:check": "wrangler deploy --dry-run",
-    "test:cloudflare": "tsx --test tests/backend.test.ts tests/database.test.ts",
-    "benchmark:student-login": "tsx scripts/benchmark-student-login.ts"
+    "migrate:local": "tsx scripts/migrate-local-data.ts",
+    "dev:cloudflare": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "deploy:check": "npm run build && wrangler deploy --dry-run",
+    "test:cloudflare": "CLOUDFLARE_TEST=1 tsx --test tests/backend.test.ts",
+    "staff:hash": "tsx scripts/hash-staff-password.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -45,5 +45,8 @@
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
     "wrangler": "^4.145.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

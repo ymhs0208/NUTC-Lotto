@@ -1,0 +1,122 @@
+{
+  "mode": "Workers",
+  "students": 500,
+  "campusNetworkOnly": true,
+  "sameSourceIp": true,
+  "sharedPassword": true,
+  "cacheInitiallyCold": true,
+  "connectionsPrewarmed": true,
+  "workerPoolWarmupErrors": [
+    0,
+    0
+  ],
+  "studentLoginAdmission": {
+    "concurrency": 16,
+    "maxWaiting": 768,
+    "waitMs": 120000
+  },
+  "sessionWorkLimits": {
+    "concurrency": 16,
+    "maxWaiting": 512,
+    "waitMs": 10000
+  },
+  "passwordHashLimits": {
+    "concurrency": 1,
+    "maxWaiting": 32,
+    "waitMs": 15000
+  },
+  "apiTimeouts": {
+    "read": 15000,
+    "studentRead": 30000,
+    "login": 45000,
+    "studentLogin": 180000,
+    "write": 60000
+  },
+  "simulatedDatabaseDelayMs": 30,
+  "simulatedQueryDelayMs": 30,
+  "nodeVersion": "v26.10.0",
+  "firstAttempt": {
+    "statuses": {
+      "200": 500
+    },
+    "successful": 500,
+    "successPercent": 100,
+    "burstMs": 3322,
+    "successfulLatency": {
+      "p50Ms": 2192,
+      "p95Ms": 3191,
+      "maxMs": 3280
+    },
+    "allLatency": {
+      "p50Ms": 2192,
+      "p95Ms": 3191,
+      "maxMs": 3280
+    },
+    "transportOrNonJsonErrors": 0,
+    "sampleErrors": [],
+    "databaseRequestsIncludingQueries": 1500
+  },
+  "oneBusyRetry": {
+    "attempted": 0,
+    "statuses": {},
+    "additionalSuccessful": 0,
+    "successfulLatency": {
+      "p50Ms": null,
+      "p95Ms": null,
+      "maxMs": null
+    },
+    "phaseMs": 0
+  },
+  "final": {
+    "successfulLogins": 500,
+    "successfulQueries": 1000,
+    "uniqueCookies": 500,
+    "incorrectStudentResults": 0,
+    "remainingStudents": 0,
+    "elapsedMs": 5275,
+    "queryStatuses": {
+      "200": 1000
+    },
+    "queryLatency": {
+      "p50Ms": 74,
+      "p95Ms": 1824,
+      "maxMs": 1945
+    }
+  },
+  "refreshBursts": [
+    {
+      "round": 1,
+      "attempted": 500,
+      "statuses": {
+        "200": 500
+      },
+      "successful": 500,
+      "incorrectResults": 0,
+      "sampleErrors": [],
+      "latency": {
+        "p50Ms": 1370,
+        "p95Ms": 1886,
+        "maxMs": 1945
+      },
+      "elapsedMs": 1952
+    }
+  ],
+  "staleConnectionRetries": 0,
+  "database": {
+    "totalRequests": 2000,
+    "types": {
+      "leaderLookup": 500,
+      "loginFinalize": 500,
+      "resultLookup": 1000
+    },
+    "peakConcurrentRequests": 31,
+    "peakRequestsPerSecond": 688,
+    "latency": {
+      "p50Ms": 30,
+      "p95Ms": 31,
+      "maxMs": 32
+    },
+    "persistedSessions": 500
+  },
+  "limitation": "Local API benchmark with simulated Supabase HTTP responses; not production Supabase CPU/IO, campus network, or browser rendering. Measures current bounded login queues and limits."
+}

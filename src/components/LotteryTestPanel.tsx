@@ -1,27 +1,31 @@
-import { formatSessionLabel } from '../lib/sessionLabel';
+import { useApiRequest } from '../lib/useApiRequest';
 import { useRef, useState } from 'react';
 import { FlaskConical, LoaderCircle, X } from 'lucide-react';
 import type { DomainConfig } from '../types';
 import type { LotteryTestResult } from '../lib/lotteryTest';
-import { isRequestCancelled } from '../lib/api';
-import { useApiRequest } from '../lib/useApiRequest';
+import { isApiRequestCancelled } from '../lib/api';
 import { useModalFocus } from '../lib/useModalFocus';
+import { formatSessionLabel } from '../lib/sessionLabel';
 
 export function LotteryTestPanel({ version, configs, disabled }: { version: number | null; configs: DomainConfig[]; disabled: boolean }) {
+  const request = useApiRequest();
   const [open, setOpen] = useState(false);
-  const request = useApiRequest(open);
   const [field, setField] = useState('ALL');
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<LotteryTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const running = useRef(false);
-  useModalFocus(open ? 'lottery-test' : null, () => setOpen(false));
+  const controllerRef = useRef<AbortController | null>(null);
+  const close = () => { controllerRef.current?.abort(); setOpen(false); };
+  useModalFocus(open ? 'lottery-test' : null, close);
   const run = async (selected: string) => {
     if (running.current || version === null) return;
+    const controller = new AbortController();
+    controllerRef.current = controller;
     running.current = true;
     setLoading(true); setReport(null); setError(null); setOpen(true);
-    try { setReport(await request<LotteryTestResult>('/api/lottery/test', { field: selected, version })); }
-    catch (err) { if (!isRequestCancelled(err)) setError(err instanceof Error ? err.message : '測試失敗，請稍後再試。'); }
+    try { setReport(await request<LotteryTestResult>('/api/lottery/test', { field: selected, version }, { signal: controller.signal })); }
+    catch (err) { if (isApiRequestCancelled(err)) return; setError(err instanceof Error ? err.message : '測試失敗，請稍後再試。'); }
     finally { running.current = false; setLoading(false); }
   };
   return <>
@@ -33,7 +37,7 @@ export function LotteryTestPanel({ version, configs, disabled }: { version: numb
       <div className="max-h-[90dvh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div><h2 className="text-lg font-bold text-slate-900">抽籤測試報告</h2><p className="mt-1 text-xs leading-relaxed text-slate-600">僅試跑目前已儲存的名冊與設定，不會儲存或覆蓋正式抽籤結果。</p></div>
-          <button type="button" aria-label="關閉測試報告" onClick={() => setOpen(false)} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+          <button type="button" aria-label="關閉測試報告" onClick={close} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"><X className="h-5 w-5" /></button>
         </div>
         <div className="my-4 flex flex-wrap items-end gap-3">
           <div className="min-w-0 flex-1"><label htmlFor="lottery-test-field" className="mb-1 block text-xs font-semibold text-slate-700">測試範圍</label>

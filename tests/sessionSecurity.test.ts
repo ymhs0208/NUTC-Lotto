@@ -5,7 +5,7 @@ import { readSessionToken, signSessionToken, sessionWork } from '../server/sessi
 import { sessionLimiter } from '../server/rateLimit';
 import { withRuntime } from '../server/runtime';
 
-const env = { SESSION_SECRET: 'local-session-test-secret-at-least-32' };
+const env = { SESSION_SECRET: 'local-session-test-secret' };
 const token = 'a'.repeat(64);
 const reqFor = (scope: 'student' | 'staff', value: string, ip = '203.0.113.1') => ({
   headers: { cookie: `ntcust_${scope}_session=${value}` }, ip,
@@ -22,7 +22,7 @@ test('session signatures bind token, scope and server key; legacy/malformed cook
     for (const invalid of [token, '', 'x'.repeat(10000), `${token}.${'0'.repeat(64)}`]) {
       assert.equal(readSessionToken(reqFor('student', invalid), 'student'), null);
     }
-    withRuntime({ SESSION_SECRET: 'rotated-session-test-secret-at-least-32' }, () => {
+    withRuntime({ SESSION_SECRET: 'rotated-session-test-secret' }, () => {
       assert.equal(readSessionToken(reqFor('student', signed), 'student'), null);
     });
     withRuntime(env, () => assert.equal(signSessionToken(token, 'student'), signed));
@@ -83,3 +83,29 @@ test('session database work rejects overflow and never exceeds 16 concurrent ope
   assert.equal(active, 0);
   await sessionWork.run(async () => {});
 });
+
+for (const mode of ['Node', 'Workers'] as const) {
+  test(`${mode}: default student IP permits 6000 requests while staff IP remains capped at 3000`, async () => {
+    const counts = new Map<string, number>();
+    const shared = { idFromName(name: string) { return name; }, get() { return { async fetch(_url: string, init: { body: string }) {
+      const { budgets } = JSON.parse(init.body);
+      if (budgets.some((b: { key: string; limit: number }) => (counts.get(b.key) || 0) >= b.limit)) return Response.json({ success: false, retryAfter: 60 });
+      for (const b of budgets) counts.set(b.key, (counts.get(b.key) || 0) + 1);
+      return Response.json({ success: true, retryAfter: 0 });
+    } }; } };
+    const runtime = { ...env, ...(mode === 'Workers' ? { LOGIN_LIMITER: shared as any } : {}) };
+    for (const scope of ['student', 'staff'] as const) {
+      const limiter = sessionLimiter(scope);
+      const limit = scope === 'student' ? 6000 : 3000;
+      const attempt = (n: number) => withRuntime(runtime, () => new Promise<number>((resolve, reject) => {
+        const raw = signSessionToken(Math.floor(n / 500).toString(16).padStart(64, '0'), scope);
+        let status = 200;
+        const res = { setHeader(_key: string, value: unknown) { assert.ok(Number(value) > 0); }, status(code: number) { status = code; return this; }, json() { resolve(status); } } as unknown as Response;
+        limiter(reqFor(scope, raw, '198.51.100.77'), res, ((error?: unknown) => error ? reject(error) : resolve(200)) as NextFunction);
+      }));
+      // Rotate cookies every 500 requests so only the IP budget reaches its bound.
+      for (let n = 0; n < limit; n++) assert.equal(await attempt(n), 200);
+      assert.equal(await attempt(limit), 429);
+    }
+  });
+}

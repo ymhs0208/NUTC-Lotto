@@ -1,13 +1,14 @@
 import type { DomainConfig, ProjectItem } from '../types';
 import { allocateDomainSubgroups, isAdvisorConflict, normalizeProfessorName } from './lottery';
 import { LotteryAllocationError } from './groupCapacities';
+import { domainCodeCollisionError, getDrawCodeNamespace } from './domainCodes';
 
 export interface LotteryTestDomain {
   field: string;
   projectCount: number;
   groups: { group: number; count: number; target: number | null }[];
   issues: { level: 'error' | 'warning'; message: string }[];
-  preview: { originalCode: string; drawCode: string; title: string; group: number; order: number }[];
+  preview: { originalCode: string; drawCode: string; title: string; group: number }[];
 }
 
 export interface LotteryTestResult {
@@ -35,6 +36,13 @@ export function testLottery(projects: ProjectItem[], configs: DomainConfig[], fi
       groups: Array.from({ length: groupCount }, (_, i) => ({ group: i + 1, count: 0, target: cfg?.groupCapacities?.[i + 1] ?? null })),
       issues: [], preview: [],
     };
+    const relatedFields = [...configs.map(c => c.field), ...projects.map(p => p.field)]
+      .filter(other => getDrawCodeNamespace(other, configs) === getDrawCodeNamespace(name, configs));
+    const collision = domainCodeCollisionError([name, ...relatedFields], configs);
+    if (collision) {
+      result.issues.push({ level: 'error', message: collision });
+      return result;
+    }
     if (!cfg) result.issues.push({ level: 'warning', message: '未找到領域設定，正式抽籤會使用預設 2 組。' });
     for (let group = 1; group <= groupCount; group++) {
       if (cfg?.groupCapacities?.[group] === 0) continue;
@@ -43,7 +51,7 @@ export function testLottery(projects: ProjectItem[], configs: DomainConfig[], fi
       else if (names.some(name => !normalizeProfessorName(name))) result.issues.push({ level: 'warning', message: `第 ${group} 組含空白或只有職稱的評審姓名，請修正設定。` });
     }
     try {
-      const drawn = allocateDomainSubgroups(items, groupCount, name, cfg?.evaluatorsPerGroup || {}, cfg?.groupCapacities, cfg?.drawPrefix);
+      const drawn = allocateDomainSubgroups(items, groupCount, name, cfg?.evaluatorsPerGroup || {}, cfg?.groupCapacities, cfg?.code);
       for (const p of drawn) {
         result.groups[p.assigned_group! - 1].count++;
         if (isAdvisorConflict(p.advisor, p.evaluators)) result.issues.push({ level: 'error', message: `${p.original_code}「${p.project_title}」在第 ${p.assigned_group} 組與指導老師有利益衝突。` });
@@ -53,7 +61,7 @@ export function testLottery(projects: ProjectItem[], configs: DomainConfig[], fi
           result.issues.push({ level: 'error', message });
           if (previous !== result) previous.issues.push({ level: 'error', message });
         } else seenCodes.set(p.draw_code!, result);
-        result.preview.push({ originalCode: p.original_code, drawCode: p.draw_code!, title: p.project_title, group: p.assigned_group!, order: p.draw_order! });
+        result.preview.push({ originalCode: p.original_code, drawCode: p.draw_code!, title: p.project_title, group: p.assigned_group! });
       }
       if (cfg?.groupCapacities) {
         if (result.groups.some(g => g.count !== g.target)) result.issues.push({ level: 'error', message: '試跑分配件數與各組指定件數不符。' });

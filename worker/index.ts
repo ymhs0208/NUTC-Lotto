@@ -1,14 +1,19 @@
+export { LotteryDatabase } from './databaseObject';
 import { createServer } from 'node:http';
 import { handleAsNodeRequest } from 'cloudflare:node';
 import type { DurableObjectNamespace, DurableObjectState, Fetcher } from '@cloudflare/workers-types/index.ts';
 import { app } from '../server/app';
 import { frontendCacheControl } from '../server/frontendAssets';
 import { withRuntime, type RuntimeEnvironment } from '../server/runtime';
+import { runScheduledMaintenance } from '../server/sessionCleanup';
+import { decideLoginBudgets, type LoginBudget, type LoginBucket } from '../server/loginBudgets';
 
 interface Env extends RuntimeEnvironment { ASSETS: Fetcher; LOGIN_LIMITER: DurableObjectNamespace; API_BACKEND: DurableObjectNamespace; }
-export { LotteryDatabase } from '../server/cloudflareDatabase';
 createServer(app).listen(8080);
 export default {
+  async scheduled(_controller: unknown, env: Env) {
+    await withRuntime({ ...env, NODE_ENV: 'production' }, runScheduledMaintenance);
+  },
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
     const isApi = url.pathname === '/api' || url.pathname.startsWith('/api/');
@@ -27,7 +32,7 @@ export default {
       }
     } else {
       // Keep users behind one campus NAT from queuing on a single API object.
-      // State lives in LOTTERY_DATABASE; counters live in LOGIN_LIMITER.
+      // These objects are stateless; the shared login counter lives in LOGIN_LIMITER.
       const shard = crypto.getRandomValues(new Uint8Array(1))[0];
       response = await env.API_BACKEND.get(env.API_BACKEND.idFromName(`api-${shard}`)).fetch(request.url, { ...forward, body: request.body });
     }
@@ -43,7 +48,7 @@ export default {
   },
 };
 
-// Give password hashing the DO CPU budget while keeping the SQLite object responsive.
+// Give password hashing the DO CPU budget; business data lives in the dedicated SQLite database object.
 export class ApiBackend {
   constructor(_ctx: DurableObjectState, private env: Env) {}
   async fetch(request: Request) {
@@ -59,7 +64,8 @@ export class ApiBackend {
 export class LoginLimiter {
   constructor(private ctx: DurableObjectState) {}
   async fetch(request: Request) {
-    const { limit, windowMs, budgets } = await request.json() as { limit: number; windowMs: number; budgets?: Array<{ key: string; limit: number }> };
+    const { limit, windowMs, budgets, loginBudgets, proof } = await request.json() as { limit: number; windowMs: number; budgets?: Array<{ key: string; limit: number }>; loginBudgets?: LoginBudget[]; proof?: boolean };
+    if (loginBudgets) return this.checkLoginBudgets(loginBudgets, windowMs, proof === true);
     if (budgets) return this.checkSessionBudgets(budgets, windowMs);
     const now = Date.now();
     const result = await this.ctx.storage.transaction(async tx => {
@@ -73,9 +79,44 @@ export class LoginLimiter {
     });
     return Response.json(result);
   }
+  private async checkLoginBudgets(budgets: LoginBudget[], windowMs: number, proof: boolean) {
+    const first = /^(staff|student):ip:[a-f0-9]{64}$/.exec(budgets[0]?.key || '');
+    const validKeys = (budgets.length === 1 && /^student:account:[a-f0-9]{64}$/.test(budgets[0].key))
+      || (budgets.length === 2 && first && new RegExp(`^${first[1]}:account:[a-f0-9]{64}$`).test(budgets[1].key));
+    if (!validKeys
+      || windowMs !== 900000 || budgets.some(b => !Number.isInteger(b.limit) || b.limit < 1)) return new Response('Invalid login budgets', { status: 400 });
+    const now = Date.now();
+    const decision = await this.ctx.storage.transaction(async tx => {
+      const resetAt = await tx.get<number>('resetAt');
+      if (resetAt && resetAt <= now) {
+        for (;;) {
+          const page = await tx.list({ limit: 1000 });
+          if (!page.size) break;
+          await tx.delete([...page.keys()]);
+        }
+      }
+      const stored = await tx.get<LoginBucket>(budgets.map(b => b.key));
+      const additions = budgets.filter(b => !stored.has(b.key)).length;
+      const expires = resetAt && resetAt > now ? resetAt : now + windowMs;
+      for (const b of budgets) if (!stored.has(b.key)) stored.set(b.key, { count: 0, resetAt: expires });
+      const result = decideLoginBudgets(budgets, stored, now, windowMs, proof);
+      if (result.updates) {
+        const count = await tx.get<number>('count') || 0;
+        if (count + additions > 10000) return { success: false, retryAfter: Math.ceil(((resetAt || now + windowMs) - now) / 1000) };
+        await tx.put({ ...Object.fromEntries(result.updates), count: count + additions, resetAt: expires });
+        await tx.setAlarm(expires);
+      }
+      return result.decision;
+    });
+    return Response.json(decision);
+  }
   private async checkSessionBudgets(budgets: Array<{ key: string; limit: number }>, windowMs: number) {
-    // Session requests have exactly three server-generated budgets; callers are internal bindings.
-    if (budgets.length !== 3 || windowMs !== 60000 || budgets.some(b => !b.key.startsWith('session:') || !Number.isInteger(b.limit) || b.limit < 1)) return new Response('Invalid budgets', { status: 400 });
+    // Campus students omit the IP budget. Token and aggregate budgets remain mandatory.
+    const scope = /^session:(staff|student):token:[a-f0-9]{64}$/.exec(budgets[0]?.key || '');
+    const validKeys = scope && budgets.at(-1)?.key === 'session:global'
+      && ((budgets.length === 2 && scope[1] === 'student')
+        || (budgets.length === 3 && new RegExp(`^session:${scope[1]}:ip:[a-f0-9]{64}$`).test(budgets[1].key)));
+    if (!validKeys || windowMs !== 60000 || budgets.some(b => !Number.isInteger(b.limit) || b.limit < 1)) return new Response('Invalid budgets', { status: 400 });
     const now = Date.now();
     const result = await this.ctx.storage.transaction(async tx => {
       const resetAt = await tx.get<number>('resetAt');

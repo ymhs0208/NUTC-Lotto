@@ -3,9 +3,13 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 export interface RuntimeEnvironment {
   SESSION_SECRET?: string;
-  SETUP_TOKEN?: string;
+  ADMIN_EMAIL?: string;
+  ADMIN_PASSWORD_HASH?: string;
   LOTTERY_DATABASE?: DurableObjectNamespace;
+  DATABASE?: import('./databaseTypes').DatabaseGateway;
   NODE_ENV?: string;
+  PASSWORD_HASH_CONCURRENCY?: string;
+  CAMPUS_NETWORK_ONLY?: string;
   LOGIN_LIMITER?: DurableObjectNamespace;
 }
 const context = new AsyncLocalStorage<RuntimeEnvironment>();

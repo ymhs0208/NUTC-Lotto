@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ApiRequestError, isRequestCancelled } from '../lib/api';
 import { useApiRequest } from '../lib/useApiRequest';
-import { hasStudentSessionHint, rememberStudentSessionHint, clearStudentSessionHint } from '../lib/studentSessionHint';
-import { ProjectItem } from '../types';
 import { formatSessionLabel } from '../lib/sessionLabel';
+import React, { useState, useEffect, useRef } from 'react';
+import { API_TIMEOUTS, ApiRequestError, isApiRequestCancelled } from '../lib/api';
+import { hasStudentSessionHint, rememberStudentSessionHint, clearStudentSessionHint } from '../lib/studentSessionHint';
+import { StudentQueryProject } from '../types';
 import {
   UserCheck,
   Clock,
@@ -25,15 +25,18 @@ export const StudentPortal: React.FC = () => {
   const [studentIdInput, setStudentIdInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [myProject, setMyProject] = useState<ProjectItem | null>(null);
+  const [myProject, setMyProject] = useState<StudentQueryProject | null>(null);
   const [sharedPasswordMode, setSharedPasswordMode] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [isCheckingSession, setIsCheckingSession] = useState(hasStudentSessionHint);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingAction, setLoadingAction] = useState<'login' | 'refresh' | 'logout' | null>(null);
+  const requestEpoch = useRef(0);
+  const restoreController = useRef<AbortController | null>(null);
   const resultSectionRef = useRef<HTMLDivElement | null>(null);
   const pendingLoginScroll = useRef(false);
+
   useEffect(() => {
     if (!myProject || !pendingLoginScroll.current) return;
     const frame = requestAnimationFrame(() => {
@@ -42,23 +45,21 @@ export const StudentPortal: React.FC = () => {
     });
     return () => cancelAnimationFrame(frame);
   }, [myProject]);
-  const requestEpoch = useRef(0);
-  const sessionController = useRef<AbortController | null>(null);
 
   const onRefresh = async () => {
     if (isLoading) return;
-    sessionController.current?.abort();
+    restoreController.current?.abort();
     requestEpoch.current++;
     setIsLoading(true);
     setLoadingAction('refresh');
     try {
-      const data = await request<{ project: ProjectItem; sharedPasswordMode: boolean }>('/api/student/me');
+      const data = await request<{ project: StudentQueryProject; sharedPasswordMode: boolean }>('/api/student/me');
       setMyProject(data.project);
       setLastUpdatedAt(new Date());
       setSharedPasswordMode(data.sharedPasswordMode);
       setErrorMessage('');
     } catch (error) {
-      if (isRequestCancelled(error)) return;
+      if (isApiRequestCancelled(error)) return;
       if (error instanceof ApiRequestError && error.status === 401) {
         clearStudentSessionHint();
         setMyProject(null);
@@ -72,11 +73,11 @@ export const StudentPortal: React.FC = () => {
     let cancelled = false;
     const epoch = requestEpoch.current;
     const controller = new AbortController();
-    sessionController.current = controller;
-    request<{ project: ProjectItem; sharedPasswordMode: boolean }>('/api/student/me', undefined, { signal: controller.signal, timeoutMs: 10000 })
+    restoreController.current = controller;
+    request<{ project: StudentQueryProject; sharedPasswordMode: boolean }>('/api/student/me', undefined, { signal: controller.signal, timeoutMs: API_TIMEOUTS.studentRead })
       .then(data => { if (!cancelled && requestEpoch.current === epoch) { if (!hasStudentSessionHint()) rememberStudentSessionHint(); setMyProject(data.project); setLastUpdatedAt(new Date()); setSharedPasswordMode(data.sharedPasswordMode); } })
       .catch(error => {
-        if (!cancelled && !isRequestCancelled(error) && requestEpoch.current === epoch) {
+        if (!cancelled && requestEpoch.current === epoch && !isApiRequestCancelled(error)) {
           if (error instanceof ApiRequestError && error.status === 401) clearStudentSessionHint();
           else setErrorMessage(error instanceof Error ? error.message : '確認登入狀態失敗，請稍後再試。');
         }
@@ -88,7 +89,7 @@ export const StudentPortal: React.FC = () => {
   }, [request]);
   const handleLogout = async () => {
     if (isLoading) return;
-    sessionController.current?.abort();
+    restoreController.current?.abort();
     requestEpoch.current++;
     setIsLoading(true);
     setLoadingAction('logout');
@@ -100,7 +101,7 @@ export const StudentPortal: React.FC = () => {
       setStudentIdInput('');
       setPasswordInput('');
       setErrorMessage('');
-    } catch (error) { if (!isRequestCancelled(error)) setErrorMessage(error instanceof Error ? error.message : '登出失敗'); }
+    } catch (error) { if (isApiRequestCancelled(error)) return; setErrorMessage(error instanceof Error ? error.message : '登出失敗'); }
     finally { setIsLoading(false); setLoadingAction(null); }
   };
 
@@ -116,25 +117,27 @@ export const StudentPortal: React.FC = () => {
       return;
     }
 
-    if (!pwd) {
-      setErrorMessage('請輸入大會提供的組長登入密碼');
+    if (!pwd.trim()) {
+      setErrorMessage('請輸入大會提供的密碼登入');
       return;
     }
 
-    sessionController.current?.abort();
+    restoreController.current?.abort();
     requestEpoch.current++;
     setIsLoading(true);
     setLoadingAction('login');
     try {
-      const data = await request<{ project: ProjectItem; sharedPasswordMode: boolean }>('/api/student/verify', { leaderId: query, password: pwd });
+      const data = await request<{ project: StudentQueryProject; sharedPasswordMode: boolean }>('/api/student/verify', { leaderId: query, password: pwd });
       rememberStudentSessionHint();
       pendingLoginScroll.current = true;
       setMyProject(data.project);
       setLastUpdatedAt(new Date());
       setSharedPasswordMode(data.sharedPasswordMode);
+      setStudentIdInput('');
       setPasswordInput('');
     } catch (error) {
-      if (!isRequestCancelled(error)) setErrorMessage(error instanceof Error ? error.message : '登入失敗');
+      if (isApiRequestCancelled(error)) return;
+      setErrorMessage(error instanceof Error ? error.message : '登入失敗');
     } finally { setIsLoading(false); setLoadingAction(null); }
   };
 
@@ -166,7 +169,7 @@ export const StudentPortal: React.FC = () => {
           <section className="order-2 rounded-[1.75rem] border border-blue-100 bg-blue-50/80 p-6 sm:p-8 lg:order-1">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-blue-700 shadow-sm"><UserCheck className="h-6 w-6" /></div>
             <h2 className="mt-6 text-xl sm:text-2xl font-black text-slate-900">查詢您的報告資訊</h2>
-            <p className="mt-3 text-sm leading-7 text-slate-600">使用組長學號與大會提供的密碼登入，即可確認專題的報告場次與上台順位。</p>
+            <p className="mt-3 text-sm leading-7 text-slate-600">使用組長學號與大會提供的密碼登入，即可確認專題的報告場次與抽籤編號。</p>
             <div className="mt-7 space-y-4 border-t border-blue-200/70 pt-6">
               <div className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-700 text-xs font-bold text-white">1</span><p className="text-sm leading-7 text-slate-700">輸入<span className="font-bold">組長學號</span>與登入密碼</p></div>
               <div className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-700 text-xs font-bold text-white">2</span><p className="text-sm leading-7 text-slate-700">查看抽籤後編號</p></div>
@@ -216,7 +219,7 @@ export const StudentPortal: React.FC = () => {
               <div>
                 <div className="text-xs text-slate-500">目前登入的組長學號（末四碼）</div>
                 <div className="text-base font-bold text-slate-900 font-mono">
-                  {(myProject.leader_id ? `••••${myProject.leader_id.slice(-4)}` : '—')}
+                  {myProject.leader_id_masked}
                 </div>
               </div>
             </div>
@@ -249,7 +252,7 @@ export const StudentPortal: React.FC = () => {
 
           {/* Main Showcase Card */}
           <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 sm:p-8 shadow-sm">
-            {myProject.draw_order ? (
+            {myProject.isDrawn ? (
               <div className="space-y-6">
                 {/* Project Header Info */}
                 <div className="flex flex-col gap-4 border-b border-slate-100 pb-6 sm:flex-row sm:items-start sm:justify-between">

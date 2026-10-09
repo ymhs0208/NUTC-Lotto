@@ -1,104 +1,96 @@
 # 國立臺中科技大學專題展報告抽籤系統
 
-React + Vite 前端與 Express API，全套後端使用 Cloudflare Workers、Static Assets 與 SQLite Durable Objects。正式執行不需要 Supabase 或獨立 Node 伺服器。新版從空名冊開始，不轉移舊資料。
+React + Vite 前端、Express API、Cloudflare Workers 與 Durable Objects SQLite。正式網站不依賴 Supabase、D1 或其他外部資料庫。
+
+## 架構
+
+- Workers 提供 HTTPS 網站、前端 Static Assets 與 `/api/*` 路由。
+- `API_BACKEND` 的 `ApiBackend` 物件分攤 API 和密碼驗證。這些物件不保存業務資料。
+- `LOTTERY_DATABASE` 的 `LotteryDatabase` 物件（固定名稱 `lottery-v1`）持久化名冊、領域、資料版本、工作人員帳號、學生及工作人員 Session、操作紀錄。所有 API 物件共用這個資料庫；不能將它改成隨機分片，否則會看到不同資料。
+- SQLite 的讀取、版本檢查與寫入在 `transactionSync` 中同步完成，不在交易內等候密碼驗證或網路。名冊／領域／版本與對應操作紀錄一同提交；其中一項失敗就全部回復。兩個使用同一版本的抽籤或儲存最多一個成功，另一個回傳 409。
+- `LOGIN_LIMITER` 保留共用限流。校網模式將學生 IP 額度放寬至設定的 50 倍，仍保留帳號、Session、IP 和整體額度。這個旗標不會限制網站的網路來源，須先在防火牆／Cloudflare 設定限制來源。
+- Workers Cron 每 10 分鐘清理過期 Session（每張表最多 500 筆）及超過臺灣日曆三個月的操作紀錄（最多 2500 筆）。沒有公開清理介面。
 
 ## 本機開發
 
-1. 安裝 Node.js 22.12 以上版本與套件：`pnpm install` 或 `npm install`。SQLite 單元測試建議使用 Node.js 22.13 以上。
-2. 複製 `.env.example` 為 `.dev.vars`，分別替換 `SESSION_SECRET` 與 `SETUP_TOKEN`。可使用 `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` 產生兩個不同的隨機值，每個至少 32 字元。不要提交這些值。
-3. 執行 `npm run dev`，開啟 `https://localhost:3000`。Wrangler 的本機 HTTPS 憑證為自簽憑證，瀏覽器首次會提示確認。本機資料保存於 `.wrangler/state`，重新啟動不會清空。
-4. 依下節建立管理員與抽籤人員帳號，登入 `/admin` 與 `/stage`。學生入口為首頁。名冊初始為空，預設保留七個領域設定；可由管理員重新匯入 Excel。
-
-`npm run dev:cloudflare` 與 `npm start` 使用相同的 Workers 本機環境。啟動前會編譯前端；修改前端後需重新編譯，Worker 與後端程式由 Wrangler 監看更新。
-
-## 工作人員帳號
-
-帳號、角色與 scrypt 密碼雜湊存放在 Cloudflare SQLite，登入不再呼叫外部 Auth 服務，也沒有預設帳密或公開註冊。
-
-在已被 Git 忽略的 `data/staff-accounts.json` 建立帳號檔，將範例 Email 與密碼替換為實際值：
-
-```json
-[
-  { "email": "admin@example.edu.tw", "role": "admin", "password": "replace-with-your-private-password" },
-  { "email": "stage@example.edu.tw", "role": "stage", "password": "replace-with-another-private-password" }
-]
-```
-
-密碼須為 8 至 128 字元。CLI 在本機計算雜湊，只將雜湊送至 Cloudflare。執行：
+使用 Node.js 22.13 以上（內建 `node:sqlite`；較舊 Node 22 版本可能顯示實驗性提示），建議目前的 Node LTS。
 
 ```sh
-TARGET_URL=https://localhost:3000 SETUP_TOKEN='<與 .dev.vars 相同的值>' npm run accounts:setup -- data/staff-accounts.json
+pnpm install
+cp .env.example .env.local
+openssl rand -hex 32
+npm run staff:hash
 ```
 
-也可將 CLI 的 `TARGET_URL` 與 `SETUP_TOKEN` 放在 `.env.local`，避免將憑證寫進 shell 歷史。CLI 會讀取 `.env.local` 與 `.env`；Wrangler 的執行設定則使用 `.dev.vars` 或正式 Secrets。
+將隨機字串填入 `.env.local` 的 `SESSION_SECRET`，將 `staff:hash` 印出的完整 `scrypt-v1$...` 填入 `ADMIN_PASSWORD_HASH`，並設定管理員 `ADMIN_EMAIL`。互動輸入的密碼不顯示，也不透過命令列參數傳送。這三項不能使用 `VITE_` 前綴。
 
-同 Email 再次執行會更新該帳號的角色與密碼，保留 ID；密碼更新立即使舊 session 失效。未列出的帳號會保留。設定完後刪除帳號檔與 CLI 的 `SETUP_TOKEN`，並移除執行環境的 `SETUP_TOKEN` 以關閉 `/api/cloudflare/setup`。未設定 token 時此端點回傳 404。日後需要設定帳號時，再臨時加入 token。
+```dotenv
+SESSION_SECRET=你的隨機字串
+ADMIN_EMAIL=admin@example.edu.tw
+ADMIN_PASSWORD_HASH=scrypt-v1$完整雜湊
+SQLITE_PATH=data/lottery.sqlite
+PORT=3000
+```
 
-## 正式部署
+執行 `npm run dev`，開啟 `http://localhost:3000/admin`，使用設定的 Email 和原密碼登入。本機資料持久化在 `data/lottery.sqlite`，重新啟動保留資料。`npm start` 仍依 `NODE_ENV` 選擇開發／正式模式；Node 正式部署請先 build，再設定 `NODE_ENV=production` 啟動。
 
-部署前先登入 Cloudflare，設定正式 Secrets。正式與本機帳號、資料庫完全獨立：
+`ADMIN_EMAIL`／`ADMIN_PASSWORD_HASH` 只在資料庫完全沒有工作人員帳號時建立第一個管理員；後續修改環境設定不會重設帳號或新增另一個管理員。登入後可在管理後台的「工作人員帳號管理」新增、改角色、設定密碼或停用帳號。變更後該帳號的現有 Session 立即失效，最後一個啟用的管理員不能被停用或降權。
+
+## Cloudflare 部署
+
+`wrangler.jsonc` 已保留原有 `v1` migration，追加 `v2` 建立 `LotteryDatabase` SQLite 物件，既有登入限流物件不會被移除。前端與 API 使用同一個 Worker 和網域。設定目前包含 `lottery.nutc.cc.cd` 自訂網域；部署到其他帳號或網域前請修改／移除 `routes`。
 
 ```sh
 npx wrangler login
 npx wrangler secret put SESSION_SECRET
-npx wrangler secret put SETUP_TOKEN
+npx wrangler secret put ADMIN_EMAIL
+npx wrangler secret put ADMIN_PASSWORD_HASH
 npm run deploy:check
 npm run deploy
 ```
 
-`wrangler.jsonc` 的 Worker 名稱為 `nutc-lotto`，與 `lottery.nutc.cc.cd` 實際綁定的 Worker 一致。Secrets 必須設定在這個 Worker。部署使用新增的 `v2` migration 建立 `LotteryDatabase`，並保留既有 `v1` 的 API 與限流物件。資料庫 schema 在物件首次啟動時自動建立，不需要手動執行 SQL 或填 D1 ID。
+依提示分別輸入隨機 Session secret、管理員 Email 和本機生成的完整密碼雜湊。線上不需要 `SQLITE_PATH`、`PORT` 或任何 Supabase 金鑰。首次登入成功後可移除 `ADMIN_EMAIL`／`ADMIN_PASSWORD_HASH` bootstrap secrets；保留它們也不會覆蓋既有帳號。
 
-Wrangler 的 `build.command` 已設定為 `npm run build`，本機直接執行 `npx wrangler deploy` 會先產生 `dist`。Cloudflare Workers Builds 不採用此自訂編譯設定，因此後台必須另外將 Build command 設為 `npm run build`、Deploy command 設為 `npx wrangler deploy`。連接 `ymhs0208/NUTC-Lotto` 的 `main` 分支，Root directory 使用儲存庫根目錄。請參閱 [Cloudflare Builds 官方設定說明](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)。
+本機 Workers 執行環境：將同樣三項設定寫入未提交的 `.dev.vars`，然後執行 `npm run dev:cloudflare -- --local-protocol https`。建議直接 `npm run build` 後用 `npx wrangler dev --local-protocol https`；資料存在 `.wrangler/state`，與 Node 的 SQLite 檔案分開。
 
-部署後以正式 `TARGET_URL=https://lottery.nutc.cc.cd` 與正式 `SETUP_TOKEN` 執行帳號設定，再關閉設定端點：
+`SESSION_SECRET` 必須長期固定並在所有 API 物件相同。輪替會使既有 Cookie 與登入挑戰失效，所有使用者須重新登入。Cookie 具用途綁定 HMAC、HttpOnly、Secure、SameSite=Strict；SQLite 僅保存 token 雜湊。工作人員及學生 Session 有效期為一小時，密碼或帳號狀態變更後仍會重新核對有效性。
 
-```sh
-npx wrangler secret delete SETUP_TOKEN
-```
+## 儲存庫既有 SQLite 升級
 
-原 Supabase secrets 已不被程式使用，可於 Cloudflare 設定移除。`supabase/migrations` 僅為舊版本歷史，新版不會讀取或執行。更換 `SESSION_SECRET` 會使所有既有登入 cookie 失效。
+沿用 `nutc-lotto` Worker、`lottery.nutc.cc.cd` 網域、`LOTTERY_DATABASE` binding、`LotteryDatabase` 類別及 `lottery-v1` 物件名稱。首次讀取舊的 metadata／projects／accounts／staff_logs 格式時，在同一 SQLite 交易升級資料表，保留名冊、結果、版本、既有工作人員密碼雜湊和紀錄；失敗整筆回復。舊 Session 不再接受，使用者需重新登入。既有 SQLite 帳號不需要重新建立；bootstrap 只用於尚無帳號的新資料庫。
 
-## 儲存與權限
+## 舊資料搬移
 
-- `LOTTERY_DATABASE` 的固定物件 `lottery-v1` 保存所有名冊、領域設定、資料版本、工作人員帳號與登入 session。專題以獨立 SQLite 資料列保存，ID 與正規化組長學號有唯一索引。
-- 所有名冊、設定、抽籤及重設寫入在 `transactionSync` 交易內比對版本並提交。兩個裝置使用同一版本寫入時只有一筆成功，另一筆收到 HTTP 409；失敗不會留下部分結果。
-- `API_BACKEND` 仍使用多個物件處理請求與 scrypt，避免密碼雜湊阻塞資料庫。`LOGIN_LIMITER` 保存共享、原子更新的登入與匿名端點限流計數。SQLite 物件僅透過 Worker binding 存取，無公開資料庫網址。
-- 工作人員與學生使用一小時的 HttpOnly、Secure、SameSite=Strict 簽名 cookie。資料庫只保存隨機 token 的 SHA-256，不保存工作人員 access token。密碼更新或學生專題刪除會使相應登入失效；登出刪除 session。Durable Object alarm 每小時清除過期 session。
-- 管理員可管理名冊、評審及設定；抽籤人員可抽籤、重設及展示結果。管理員 API 不回傳密碼雜湊，抽籤人員 API 不回傳學號、班級、指導老師與評審名單。
-- 學生登入依組長學號查詢單筆專題，查榜以 session 綁定專題，不接受前端指定其他專題。公開結果僅含領域、編號、分組與順位。跨站 JSON 寫入會被拒絕。
-- 學生個別密碼使用 scrypt（N=32768、r=8、p=3）與隨機 salt。密碼留空保留既有雜湊，新名冊不自動產生預設密碼；變更學號須重新設定密碼。共用密碼功能產生 8 碼隨機密碼，僅顯示一次；輪替或停用會使舊 session 失效。
-- 名冊最多 2000 筆，匯入與寫入上限 5 MB；單次最多設定 100 組學生密碼。小操作上限 64 KB，登入上限 4 KB。登入入隊、scrypt、session 工作保留原有並行與等待限制。
-- 本版公開結果直接讀取同一 SQLite 快照，成功寫入後立即可見；不使用跨 isolate 的舊快取。資料庫不可用時回傳錯誤，不改用本機 JSON 或前端抽籤。
+這次程式變更不會自動讀取或刪除舊線上資料。新 SQLite 資料庫初始為空名冊與預設領域，應在正式切換前安排搬移。
 
-## 抽籤與展示
+1. 暫停舊系統的抽籤及名冊寫入。在舊 PostgreSQL 的 SQL Editor 執行唯讀的 `scripts/export-legacy-state.sql`，將 `backup` 欄位內容保存為私人的 JSON 檔。格式是 `{ "projects": [...], "domainConfigs": [...] }`。若匯出工具外包了陣列／欄位，請取出 `backup` 的物件本體。
+2. 部署新版本、設定管理員並登入。使用管理後台的「名冊與結果搬移」上傳該 JSON；只允許完全未操作的目標資料庫，已有資料或版本非零時會拒絕。匯入保留名冊、領域、評審、場次與抽籤結果，驗證不通過整筆回復。
+3. 匯入會清除舊學生密碼／密碼雜湊，請在新後台重新產生共用密碼或設定個別密碼。工作人員帳號需在新後台重新建立；舊 Session、Supabase Auth 密碼與舊操作紀錄不自動搬移。舊紀錄請另行保存，新系統開始記錄新的操作。
+4. 確认管理員及抽籤人員登入、名冊件數、學生查詢、公開結果和操作紀錄，再停止使用舊系統。確認備份與新系統正常前，保留舊資料庫。
 
-抽籤保留指導老師利益迴避、領域多選、指定每組件數、領域顯示順序及全螢幕結果輪播。多領域抽籤在一次交易中提交，任一領域配置無解時整次不儲存。已有結果的領域或組別須先重設才能刪除或縮減。
+搬入 Node 本機：`npm run migrate:local -- /絕對路徑/backup.json`。這會拒絕覆蓋已被操作的本機資料庫，同樣移除學生舊密碼。
 
-A～G 領域使用領域字母加至少兩位數字，例如 A01、A100；原始編號與抽籤編號分開，重設不會重新編排名冊。Excel 匯出依原始編號排序，不含密碼或雜湊。管理員測試抽籤只試跑，不變更正式資料或版本。
+管理後台也可以下載「名冊與結果備份」。JSON 包含學生密碼雜湊，請妥善保存；不包含工作人員帳號、Session 或操作紀錄。匯入仍只允許空白資料庫，而且會清除學生密碼；它是資料搬移工具，並非完整帳號與稽核資料的災難復原工具。完整 SQLite 復原可使用 Cloudflare Durable Objects 的時間點復原功能，操作前應確認要復原的物件與時間。
+
+## 功能與保護
+
+前端保留管理員 `/admin`、抽籤人員 `/stage`、學生查詢 `/`、公開結果 `/results` 和工作人員紀錄 `/audit`。保留 Excel 匯入匯出、場次與評審設定、利益迴避、各組容量、抽籤試跑、分領域抽籤、重設、公開榜單、資料版本衝突檢查。工作人員 API 依角色授權；公開結果只輸出抽籤編號、場次、專題名稱、組長姓名。學生只取得自己的查詢 DTO，不回傳完整學號、名冊或密碼。
+
+名冊最多 2000 筆，領域最多 100 筆，組數最多 50。Workers 每次最多設定 100 組個別學生密碼，共用密碼只驗證一次雜湊並短期合併同時請求。密碼使用現有 scrypt-v1 格式（N=32768、r=8、p=3），Workers 預設每 isolate 一個雜湊工作，須在正式環境測試 CPU／記憶體與費用。
+
+資料庫物件只接受私有 binding 的固定操作，外部 URL 不能執行 SQL、讀取帳號雜湊或直接呼叫資料庫。帳號權限在資料寫入與 Session 建立時再次核對。帳號變更、資料搬移、成功登入／登出、共用密碼操作、正式抽籤與重設有交易內操作紀錄。日誌不輸出密碼、Cookie 或資料庫錯誤細節。
+
+一般 API 讀取期限 15 秒、學生查詢 30 秒、工作人員登入 45 秒、學生登入 180 秒、寫入 60 秒。取消／逾時可能發生在後端已提交之後，抽籤、匯入、登入及寫入不會因網路失敗自動重送；先重新載入確認再決定是否重試。
 
 ## 驗證
 
 ```sh
 npm run lint
 npm test
+npm run test:cloudflare
 npm run deploy:check
-npm run benchmark:student-login -- --students=300
 ```
 
-測試包含 SQLite 交易回復、版本衝突、單筆學生查詢、session 到期清理，以及實際本機 workerd 的登入、角色限制、抽籤、公開資料白名單、密碼輪替與重啟持久性。整合測試與 benchmark 使用暫存的獨立資料庫及合成帳號，不修改正式或開發資料。Benchmark 測量本機 Workers 與 SQLite，不代表正式校園網路容量。
+`npm test` 包含真實本機 SQLite 的交易回復、版本衝突、憑證更新失效、持久化、公開欄位與 1201 筆查詢、清理及 HTTP 功能測試。`test:cloudflare` 啟動隔離的 Wrangler 本機環境，以真正 Durable Objects SQLite 執行登入、抽籤、重設、權限及重新啟動持久化測試，不呼叫外部資料庫或部署到帳號。只有該測試程序允許自簽的本機 HTTPS 憑證。
 
-SQLite Durable Objects 的儲存與交易行為可參考 [Cloudflare 官方文件](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/)。
-
-## 各領域結果查詢
-
-免登入開啟 `/results`。選擇領域後可查詢已抽籤專題的編號、報告場次與專題名稱；支援卡片／表格切換、每次增加 50 件及手動更新。切換顯示方式使用已載入資料。
-
-唯讀 API：`GET /api/public/results?field=領域名稱`。未指定領域時只取得領域選單；結果依場次與報告順序排列。不回傳組長學號、密碼、評審或未抽籤專題。沿用現有 Cloudflare SQLite 資料庫，不需新增資料庫 migration。
-
-## Excel 範本與結果欄位
-
-下載匯入範本會使用目前設定的前兩個領域作為範例，欄位包含「原始編號」；組長密碼預設留白。匯出結果包含「原始編號」、「抽籤編號」、「報告場次」（例如第二場次）與數字「組內順序」，未分配／未抽籤明確標示。匯出不包含密碼。
-
-匯入接受新欄位及舊版「編號」、「+編號(抽籤後)」等欄名。新結果檔重新匯入會保留實際場次與組內順序，不會把跨場次抽籤編號誤認為組內順序。
-
-管理頁、Excel 匯入範本與結果匯出支援「組長姓名」。姓名可留白，舊名冊仍可匯入；已公布的專題姓名會顯示於各領域結果頁。沿用現有 SQLite 文件儲存，不需資料庫 migration。
+`deploy:check` 只確認建置及部署封裝，不會上線。原有 Supabase SQL、測試和說明保存在 `legacy/supabase/` 供回查，不參與目前執行或測試。`security/evidence/` 的舊壓測以模擬 Supabase 產生，不能當作這個 SQLite 架構的容量證明；正式使用前須再以預計學生人數進行負載測試。

@@ -1,7 +1,7 @@
+import { useApiRequest } from '../lib/useApiRequest';
 import React, { useState } from 'react';
 import { AuthSession, saveAuthSession } from '../lib/auth';
-import { isRequestCancelled } from '../lib/api';
-import { useApiRequest } from '../lib/useApiRequest';
+import { isApiRequestCancelled } from '../lib/api';
 import {
   Lock,
   User,
@@ -20,8 +20,8 @@ export const AuthGate: React.FC<AuthGateProps> = ({
   targetView,
   onSuccess,
 }) => {
+  const request = useApiRequest();
   const isStage = targetView === 'stage';
-  const request = useApiRequest(targetView);
   const defaultUser = '';
 
   const [username, setUsername] = useState<string>(defaultUser);
@@ -34,28 +34,26 @@ export const AuthGate: React.FC<AuthGateProps> = ({
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-    const email = username.trim();
-    if (!email) {
-      setErrorMessage('請輸入登入 Email。');
-      e.currentTarget.querySelector<HTMLInputElement>('#staff-email')?.focus();
+    setErrorMessage(null);
+    if (!username.trim()) {
+      setErrorMessage('請輸入登入 Email');
       return;
     }
     if (!password.trim()) {
-      setErrorMessage('請輸入通行密碼。');
-      e.currentTarget.querySelector<HTMLInputElement>('#staff-password')?.focus();
+      setErrorMessage('請輸入通行密碼');
       return;
     }
-    setErrorMessage(null);
     setIsSubmitting(true);
     try {
       const data = await request<{ session: AuthSession }>('/api/auth/verify', {
-        username: email, password, targetView, remember: rememberMe,
+        username: username.trim(), password, targetView, remember: rememberMe,
       });
       const session = data.session;
       saveAuthSession(session);
       onSuccess(session);
     } catch (error) {
-      if (!isRequestCancelled(error)) setErrorMessage(error instanceof Error ? error.message : '驗證失敗，請稍後再試');
+      if (isApiRequestCancelled(error)) return;
+      setErrorMessage(error instanceof Error ? error.message : '驗證失敗，請稍後再試');
     } finally {
       setIsSubmitting(false);
     }
@@ -101,7 +99,6 @@ export const AuthGate: React.FC<AuthGateProps> = ({
               <input
                 id="staff-email"
                 type="email"
-                required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="例如：admin@example.edu.tw"
@@ -123,7 +120,6 @@ export const AuthGate: React.FC<AuthGateProps> = ({
               <input
                 id="staff-password"
                 type={showPassword ? 'text' : 'password'}
-                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="請輸入授權通行密碼"

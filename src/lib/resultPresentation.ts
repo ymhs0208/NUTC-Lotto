@@ -1,3 +1,4 @@
+import { isCompleteDrawResult, compareDrawCodes } from './drawScope';
 import type { DomainConfig, ProjectItem } from '../types';
 
 export interface ResultSlide {
@@ -10,14 +11,13 @@ export interface ResultSlide {
   items: ProjectItem[];
 }
 
-/** Only saved assignments; domain display order, then group and report order. */
+/** Only saved assignments; domain display order, then session and numeric draw code. */
 export function buildResultSlides(projects: ProjectItem[], domains: DomainConfig[], scope: string | string[] = 'ALL', pageSize = 6): ResultSlide[] {
   if (!Number.isSafeInteger(pageSize) || pageSize < 1) throw new Error('Invalid presentation page size');
   const grouped = new Map<string, Map<number, ProjectItem[]>>();
   for (const item of projects) {
     if (Array.isArray(scope) ? !scope.includes(item.field) : scope !== 'ALL' && item.field !== scope) continue;
-    if (!Number.isSafeInteger(item.assigned_group) || item.assigned_group! < 1 ||
-        !Number.isSafeInteger(item.draw_order) || item.draw_order! < 1) continue;
+    if (!isCompleteDrawResult(item)) continue;
     if (!grouped.has(item.field)) grouped.set(item.field, new Map());
     const groups = grouped.get(item.field)!;
     if (!groups.has(item.assigned_group!)) groups.set(item.assigned_group!, []);
@@ -27,7 +27,7 @@ export function buildResultSlides(projects: ProjectItem[], domains: DomainConfig
   return fields.flatMap((field) => [...(grouped.get(field)?.entries() ?? [])]
     .sort(([a], [b]) => a - b)
     .flatMap(([group, items]) => {
-      const sorted = [...items].sort((a, b) => a.draw_order! - b.draw_order! || a.id.localeCompare(b.id));
+      const sorted = [...items].sort(compareDrawCodes);
       const pages = Math.ceil(sorted.length / pageSize);
       return Array.from({ length: pages }, (_, page) => ({
         key: JSON.stringify([field, group, page]), field, group, page, pages,

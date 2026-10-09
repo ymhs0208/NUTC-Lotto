@@ -1,32 +1,32 @@
-import { useCallback, useEffect, useMemo } from 'react';
-import { apiRequest, ApiRequestError, type ApiRequestOptions, type StoreState } from './api';
+import { useCallback, useEffect, useRef } from 'react';
+import { apiRequest, ApiRequestCancelledError, type ApiRequestOptions, type StoreState } from './api';
 
-// Each view owns its requests; leaving it cancels every pending network operation.
-export function useApiRequest(scopeKey?: unknown) {
-  const scope = useMemo(() => ({ pending: new Set<AbortController>(), active: true }), [scopeKey]);
+/** Each mounted screen owns its requests; leaving it cancels outstanding work. */
+export function useApiRequest() {
+  const controllers = useRef(new Set<AbortController>());
+  const mounted = useRef(true);
   useEffect(() => {
-    scope.active = true;
+    mounted.current = true;
     return () => {
-      scope.active = false;
-      for (const controller of scope.pending) controller.abort();
-      scope.pending.clear();
+      mounted.current = false;
+      for (const controller of controllers.current) controller.abort();
+      controllers.current.clear();
     };
-  }, [scope]);
+  }, []);
   return useCallback(async <T = StoreState>(url: string, body?: Record<string, unknown>, options: ApiRequestOptions = {}): Promise<T> => {
-    if (!scope.active) throw new ApiRequestError('請求已取消。', 0, 'cancelled');
+    if (!mounted.current) throw new ApiRequestCancelledError();
     const controller = new AbortController();
     const cancel = () => controller.abort();
-    options.signal?.addEventListener('abort', cancel, { once: true });
-    if (options.signal?.aborted) cancel();
-    scope.pending.add(controller);
+    if (options.signal?.aborted) controller.abort();
+    else options.signal?.addEventListener('abort', cancel, { once: true });
+    controllers.current.add(controller);
     try {
-      const result = await apiRequest<T>(url, body, { ...options, signal: controller.signal });
-      if (!scope.active || controller.signal.aborted) throw new ApiRequestError('請求已取消。', 0, 'cancelled');
-      return result;
-    }
-    finally {
-      scope.pending.delete(controller);
+      const data = await apiRequest<T>(url, body, { ...options, signal: controller.signal });
+      if (!mounted.current || controller.signal.aborted) throw new ApiRequestCancelledError();
+      return data;
+    } finally {
+      controllers.current.delete(controller);
       options.signal?.removeEventListener('abort', cancel);
     }
-  }, [scope]);
+  }, []);
 }

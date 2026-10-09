@@ -14,7 +14,8 @@ test('explicit capacities produce exact counts including zero, preserve projects
   assert.deepEqual([1, 2, 3].map(g => drawn.filter(p => p.assigned_group === g).length), [1, 0, 5]);
   assert.equal(new Set(drawn.map(p => p.id)).size, 6);
   assert.deepEqual(drawn.map(p => p.draw_code), ['A01', 'A02', 'A03', 'A04', 'A05', 'A06']);
-  assert.deepEqual(drawn.filter(p => p.assigned_group === 3).map(p => p.draw_order), [1, 2, 3, 4, 5]);
+  assert.equal(new Set(drawn.filter(p => p.assigned_group === 3).map(p => p.draw_code)).size, 5);
+  assert.ok(drawn.every(p => !('draw_order' in p)));
   assert.deepEqual(projects, before);
 });
 
