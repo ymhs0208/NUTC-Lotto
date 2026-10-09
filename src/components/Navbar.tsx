@@ -114,6 +114,7 @@ export const Navbar: React.FC<NavbarProps> = ({ authSession, onLogout }) => {
                       <span className="whitespace-nowrap">操作紀錄</span>
                     </a>}
                   </div>
+                  {isAdmin && <a href="/accounts" className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600"><UserRound className="h-5 w-5 text-blue-700" aria-hidden="true" /><span>工作人員帳號管理</span></a>}
                 </nav>}
                 <div className={canOpenStage ? 'mt-3 border-t border-slate-200 pt-3' : ''}>
                   <button

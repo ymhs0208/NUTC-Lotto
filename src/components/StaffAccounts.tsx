@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApiRequest } from '../lib/useApiRequest';
 import { isApiRequestCancelled } from '../lib/api';
 type Account = { id: string; email: string; role: 'admin' | 'stage'; disabled: number };
 export function StaffAccounts() {
   const request = useApiRequest();
-  const [open, setOpen] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'stage'>('stage');
@@ -12,12 +11,15 @@ export function StaffAccounts() {
   const [disabled, setDisabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const load = async () => {
+  useEffect(() => {
+    const controller = new AbortController();
     setBusy(true); setMessage('');
-    try { setAccounts((await request<{ accounts: Account[] }>('/api/staff-accounts')).accounts); }
-    catch (error) { if (!isApiRequestCancelled(error)) setMessage(error instanceof Error ? error.message : '無法載入帳號。'); }
-    finally { setBusy(false); }
-  };
+    request<{ accounts: Account[] }>('/api/staff-accounts', undefined, { signal: controller.signal })
+      .then(data => { if (!controller.signal.aborted) setAccounts(data.accounts); })
+      .catch(error => { if (!controller.signal.aborted && !isApiRequestCancelled(error)) setMessage(error instanceof Error ? error.message : '無法載入帳號。'); })
+      .finally(() => { if (!controller.signal.aborted) setBusy(false); });
+    return () => controller.abort();
+  }, [request]);
   const save = async (event: React.FormEvent) => {
     event.preventDefault(); if (busy) return;
     setBusy(true); setMessage('');
@@ -29,11 +31,12 @@ export function StaffAccounts() {
     finally { setBusy(false); }
   };
   const fieldClass = 'w-full rounded-xl border border-slate-300 px-3 py-2 text-sm';
-  return <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-    <button type="button" aria-expanded={open} onClick={() => { setOpen(!open); if (!open) void load(); }} className="flex w-full items-center justify-between text-left font-bold text-slate-900">
-      <span>工作人員帳號管理</span><span aria-hidden="true">{open ? '−' : '＋'}</span>
-    </button>
-    {open && <div className="mt-5 space-y-5">
+  return <section className="mx-auto max-w-4xl space-y-5 px-4 py-6 sm:px-6">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <h1 className="text-xl font-black text-slate-900 sm:text-2xl">工作人員帳號管理</h1>
+      <a href="/admin" className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700">返回管理後台</a>
+    </div>
+    <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
       <p className="text-sm text-slate-500">新增帳號或選擇既有帳號修改。新密碼須至少 8 字元；修改角色、密碼或停用後，該帳號的既有登入會失效。</p>
       {message && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm">{message}</p>}
       <ul className="divide-y divide-slate-100">{accounts.map(account => <li key={account.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
@@ -47,6 +50,6 @@ export function StaffAccounts() {
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={disabled} onChange={e => setDisabled(e.target.checked)} />停用此帳號</label>
         <div className="flex gap-2 sm:col-span-2"><button disabled={busy} type="submit" className="rounded-xl bg-blue-700 px-5 py-2 text-sm font-bold text-white disabled:opacity-50">{busy ? '處理中…' : '儲存帳號'}</button><button disabled={busy} type="button" onClick={() => { setEmail(''); setPassword(''); setRole('stage'); setDisabled(false); setMessage(''); }} className="rounded-xl border border-slate-300 px-4 py-2 text-sm">清空表單</button></div>
       </form>
-    </div>}
+    </div>
   </section>;
 }

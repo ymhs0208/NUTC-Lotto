@@ -6,7 +6,6 @@ import { preserveImportedProjectIds } from '../lib/importProjects';
 import { isAdvisorConflict, normalizeProfessorName } from '../lib/lottery';
 import { sortProjects, type ProjectSortKey, type ProjectSortDirection } from '../lib/projectSort';
 import { useModalFocus } from '../lib/useModalFocus';
-import { StaffAccounts } from './StaffAccounts';
 import { FloatingNotice } from './FloatingNotice';
 import { ProjectRosterCard } from './ProjectRosterCard';
 import { LotteryTestPanel } from './LotteryTestPanel';
@@ -670,7 +669,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
         </div>
       </div>
 
-      <StaffAccounts />
+      <div className="flex justify-end"><a href="/accounts" className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">工作人員帳號管理</a></div>
 
       {/* Main admin actions */}
       <div className="space-y-4">

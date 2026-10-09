@@ -26,6 +26,7 @@ const PublicResults = lazy(() => import('./components/PublicResults').then(modul
 const StageLottery = lazy(() => import('./components/StageLottery').then(module => ({ default: module.StageLottery })));
 const AdminManagement = lazy(() => import('./components/AdminManagement').then(module => ({ default: module.AdminManagement })));
 
+const StaffAccounts = lazy(() => import('./components/StaffAccounts').then(module => ({ default: module.StaffAccounts })));
 const StaffAudit = lazy(() => import('./components/StaffAudit').then(module => ({ default: module.StaffAudit })));
 
 export default function App() {
@@ -128,7 +129,7 @@ export default function App() {
       setIsLoading(false);
       return;
     }
-    if (currentView === 'audit') { setIsLoading(false); return; }
+    if (currentView === 'audit' || currentView === 'accounts') { setIsLoading(false); return; }
     setIsLoading(true);
     try {
       const state = await request<StoreState>('/api/state', undefined, { signal: controller.signal });
@@ -195,7 +196,7 @@ export default function App() {
 
       {/* Main Content Viewport */}
       <main id="main-content" tabIndex={-1} className="flex-1 pb-16">
-        <span className="sr-only" aria-live="polite">{currentView === 'results' ? '各領域抽籤結果' : currentView === 'student' ? '專題報告場次查詢' : currentView === 'stage' ? '專題報告抽籤現場' : currentView === 'audit' ? '工作人員操作紀錄' : '管理後台'}</span>
+        <span className="sr-only" aria-live="polite">{currentView === 'results' ? '各領域抽籤結果' : currentView === 'student' ? '專題報告場次查詢' : currentView === 'stage' ? '專題報告抽籤現場' : currentView === 'accounts' ? '工作人員帳號管理' : currentView === 'audit' ? '工作人員操作紀錄' : '管理後台'}</span>
         {dataError && (
           <FloatingNotice
             type="error"
@@ -205,7 +206,7 @@ export default function App() {
             onAction={() => void loadData()}
           />
         )}
-        {isLoading && currentView !== 'student' && currentView !== 'results' && currentView !== 'audit' ? (
+        {isLoading && currentView !== 'student' && currentView !== 'results' && currentView !== 'audit' && currentView !== 'accounts' ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
             <div className="w-9 h-9 border-3 border-rose-100 border-t-rose-600 rounded-full animate-spin" />
             <p className="text-slate-500 text-xs">載入專題名冊與抽籤資料中...</p>
@@ -234,6 +235,12 @@ export default function App() {
                   domainConfigs={domainConfigs}
                 />
               )
+            )}
+
+            {currentView === 'accounts' && (
+              !hasPermissionForView(authSession?.role || null, 'accounts') ? (
+                <AuthGate targetView="admin" onSuccess={setAuthSession} />
+              ) : <StaffAccounts />
             )}
 
             {currentView === 'audit' && (

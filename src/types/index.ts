@@ -35,7 +35,7 @@ export interface DomainConfig {
   evaluatorsPerGroup?: Record<number, string[]>; // 每一個分組 (1..N) 的評分教授清單
 }
 
-export type ViewMode = 'student' | 'results' | 'stage' | 'admin' | 'audit';
+export type ViewMode = 'student' | 'results' | 'stage' | 'admin' | 'audit' | 'accounts';
 
 export interface PublicDrawResult {
   draw_code: string;

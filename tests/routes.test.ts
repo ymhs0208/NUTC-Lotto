@@ -6,7 +6,7 @@ const location = (url: string) => new URL(url, 'https://example.test');
 
 test('home remains at root and staff routes have clean canonical URLs', () => {
   for (const [url, view, canonical] of [
-    ['/', 'student', '/'], ['/student', 'student', '/'], ['/admin', 'admin', '/admin'], ['/stage', 'stage', '/stage'], ['/results', 'results', '/results'],
+    ['/', 'student', '/'], ['/student', 'student', '/'], ['/admin', 'admin', '/admin'], ['/stage', 'stage', '/stage'], ['/results', 'results', '/results'], ['/accounts', 'accounts', '/accounts'], ['/ACCOUNTS/', 'accounts', '/accounts'],
     ['/ADMIN/', 'admin', '/admin'], ['/manage', 'admin', '/admin'], ['/lottery', 'stage', '/stage'], ['/inquiry', 'student', '/'],
   ]) {
     assert.equal(getViewFromLocation(location(url)), view);
