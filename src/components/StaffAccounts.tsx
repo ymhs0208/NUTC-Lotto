@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, CheckCircle2, Eye, EyeOff, LoaderCircle, Plus, Search, ShieldCheck, Users, UserRound, Pencil, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, LoaderCircle, Plus, Search, ShieldCheck, Users, UserRound, Pencil, RefreshCw } from 'lucide-react';
 import { useApiRequest } from '../lib/useApiRequest';
 import { isApiRequestCancelled } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
@@ -77,7 +77,7 @@ export function StaffAccounts() {
 
   return <section className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><a href="/admin" className="mb-3 inline-flex min-h-9 items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-blue-700"><ArrowLeft className="h-4 w-4" aria-hidden="true" />返回管理後台</a>
+      <div>
         <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">工作人員帳號管理</h1>
         <p className="mt-2 text-sm text-slate-500">管理大會人員的登入帳號、角色與使用狀態。</p>
       </div>
