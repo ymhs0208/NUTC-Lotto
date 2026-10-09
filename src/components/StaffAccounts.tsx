@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CheckCircle2, Eye, EyeOff, LoaderCircle, Plus, Search, ShieldCheck, Users, UserRound, Pencil, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, LoaderCircle, Search, ShieldCheck, Users, UserRound, Pencil, RefreshCw } from 'lucide-react';
 import { useApiRequest } from '../lib/useApiRequest';
 import { isApiRequestCancelled } from '../lib/api';
 import { getAuthSession } from '../lib/auth';
@@ -81,7 +81,6 @@ export function StaffAccounts() {
         <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">工作人員帳號管理</h1>
         <p className="mt-2 text-sm text-slate-500">管理大會人員的登入帳號、角色與使用狀態。</p>
       </div>
-      <button type="button" disabled={busy} onClick={() => openForm(null)} className="mt-1 inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-bold text-white hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50"><Plus className="h-4 w-4" aria-hidden="true" />新增帳號</button>
     </div>
     <div className="grid grid-cols-3 gap-2 sm:gap-4">{stats.map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-5"><Icon className="mb-3 h-5 w-5 text-blue-700" aria-hidden="true" /><p className="text-xs font-medium text-slate-500 sm:text-sm">{label}</p><p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{loading || loadError ? '—' : value}</p></div>)}</div>
     {notice && <div role={notice.error ? 'alert' : 'status'} className={`flex items-start gap-2 rounded-xl border p-4 text-sm ${notice.error ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>{!notice.error && <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden="true" />}{notice.text}</div>}
