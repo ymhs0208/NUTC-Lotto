@@ -58,8 +58,10 @@ test(`independent SQLite backend works without external services (${workers ? 'W
     const admin = await call('/api/auth/verify', { username: 'admin@test.local', password, targetView: 'admin', remember: true });
     assert.equal(admin.status, 200, JSON.stringify(admin.data));
     assert.ok(admin.cookie); assert.match(admin.response.headers.get('set-cookie')!, /HttpOnly/i);
-    assert.equal((await call('/api/staff-accounts', { email: 'stage@test.local', password, role: 'stage', disabled: false }, admin.cookie)).status, 200);
-    const stage = await call('/api/auth/verify', { username: 'stage@test.local', password, targetView: 'stage' });
+    const stagePassword = 'Stage123';
+    assert.equal((await call('/api/staff-accounts', { email: 'stage@test.local', password: 'Stage12', role: 'stage', disabled: false }, admin.cookie)).status, 400);
+    assert.equal((await call('/api/staff-accounts', { email: 'stage@test.local', password: stagePassword, role: 'stage', disabled: false }, admin.cookie)).status, 200);
+    const stage = await call('/api/auth/verify', { username: 'stage@test.local', password: stagePassword, targetView: 'stage' });
     assert.equal(stage.status, 200); assert.equal((await call('/api/projects', undefined, stage.cookie)).status, 403);
     assert.equal((await call('/api/staff-accounts', undefined, stage.cookie)).status, 403);
     assert.equal((await call('/api/data/import', { projects: [], domainConfigs: domains }, stage.cookie)).status, 403);

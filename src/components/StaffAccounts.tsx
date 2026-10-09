@@ -34,7 +34,7 @@ export function StaffAccounts() {
       <span>工作人員帳號管理</span><span aria-hidden="true">{open ? '−' : '＋'}</span>
     </button>
     {open && <div className="mt-5 space-y-5">
-      <p className="text-sm text-slate-500">新增帳號或選擇既有帳號修改。新密碼須至少 12 字元；修改角色、密碼或停用後，該帳號的既有登入會失效。</p>
+      <p className="text-sm text-slate-500">新增帳號或選擇既有帳號修改。新密碼須至少 8 字元；修改角色、密碼或停用後，該帳號的既有登入會失效。</p>
       {message && <p role="status" className="rounded-xl bg-slate-100 p-3 text-sm">{message}</p>}
       <ul className="divide-y divide-slate-100">{accounts.map(account => <li key={account.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
         <span className="break-all">{account.email} · {account.role === 'admin' ? '管理員' : '抽籤人員'}{account.disabled ? ' · 已停用' : ''}</span>
@@ -43,7 +43,7 @@ export function StaffAccounts() {
       <form onSubmit={save} className="grid gap-4 sm:grid-cols-2">
         <label className="space-y-1 text-sm font-semibold">Email<input required type="email" maxLength={256} value={email} onChange={e => setEmail(e.target.value)} autoComplete="off" className={fieldClass} /></label>
         <label className="space-y-1 text-sm font-semibold">角色<select value={role} onChange={e => setRole(e.target.value as 'admin' | 'stage')} className={fieldClass}><option value="stage">抽籤人員</option><option value="admin">管理員</option></select></label>
-        <label className="space-y-1 text-sm font-semibold">新密碼<input type="password" minLength={12} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" placeholder="既有帳號可留空保留密碼" className={fieldClass} /></label>
+        <label className="space-y-1 text-sm font-semibold">新密碼<input type="password" minLength={8} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" placeholder="既有帳號可留空保留密碼" className={fieldClass} /></label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={disabled} onChange={e => setDisabled(e.target.checked)} />停用此帳號</label>
         <div className="flex gap-2 sm:col-span-2"><button disabled={busy} type="submit" className="rounded-xl bg-blue-700 px-5 py-2 text-sm font-bold text-white disabled:opacity-50">{busy ? '處理中…' : '儲存帳號'}</button><button disabled={busy} type="button" onClick={() => { setEmail(''); setPassword(''); setRole('stage'); setDisabled(false); setMessage(''); }} className="rounded-xl border border-slate-300 px-4 py-2 text-sm">清空表單</button></div>
       </form>

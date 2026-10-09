@@ -22,7 +22,7 @@ openssl rand -hex 32
 npm run staff:hash
 ```
 
-將隨機字串填入 `.env.local` 的 `SESSION_SECRET`，將 `staff:hash` 印出的完整 `scrypt-v1$...` 填入 `ADMIN_PASSWORD_HASH`，並設定管理員 `ADMIN_EMAIL`。互動輸入的密碼不顯示，也不透過命令列參數傳送。這三項不能使用 `VITE_` 前綴。
+將隨機字串填入 `.env.local` 的 `SESSION_SECRET`，將 `staff:hash` 印出的完整 `scrypt-v1$...` 填入 `ADMIN_PASSWORD_HASH`，並設定管理員 `ADMIN_EMAIL`。管理員與抽籤人員密碼須至少 8 字元、最多 128 字元。互動輸入的密碼不顯示，也不透過命令列參數傳送。這三項不能使用 `VITE_` 前綴。
 
 ```dotenv
 SESSION_SECRET=你的隨機字串

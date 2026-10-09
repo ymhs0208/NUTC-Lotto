@@ -4,7 +4,7 @@ async function readPassword(): Promise<string> {
     let input = ''; for await (const chunk of process.stdin) input += chunk;
     return input.replace(/\r?\n$/, '');
   }
-  process.stderr.write('管理員密碼（至少 12 字元，輸入不顯示）：');
+  process.stderr.write('管理員密碼（至少 8 字元，輸入不顯示）：');
   process.stdin.setRawMode(true); process.stdin.resume(); process.stdin.setEncoding('utf8');
   return new Promise((resolve, reject) => {
     let password = '';
@@ -21,5 +21,5 @@ async function readPassword(): Promise<string> {
   });
 }
 const password = await readPassword();
-if (password.trim().length < 12 || password.length > 128) throw new Error('密碼須為 12 至 128 字元。');
+if (password.trim().length < 8 || password.length > 128) throw new Error('密碼須為 8 至 128 字元。');
 console.log(await hashPassword(password));

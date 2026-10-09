@@ -352,7 +352,7 @@ app.post('/api/staff-accounts', route(async (req, res) => {
   await authorize(req, true);
   const { email, role, password, disabled } = req.body;
   if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.length > 256 || !['admin', 'stage'].includes(role) || typeof disabled !== 'boolean' ||
-    (password !== undefined && (typeof password !== 'string' || password.trim().length < 12 || password.length > 128))) throw new ApiError(400, '請填寫有效帳號、角色與至少 12 字元的密碼。');
+    (password !== undefined && (typeof password !== 'string' || password.trim().length < 8 || password.length > 128))) throw new ApiError(400, '請填寫有效帳號、角色與至少 8 字元的密碼。');
   const passwordHash = password ? await hashPassword(password) : undefined;
   await database().call('setStaffAccount', { actor: await auditActor(req), email, role, passwordHash, disabled });
   res.json({ success: true });
