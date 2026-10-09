@@ -1,5 +1,9 @@
-allowBuilds:
-  '@google/genai': true
-  esbuild: true
-  protobufjs: true
-  workerd: true
+packages:
+  - '.'
+
+# pnpm 10 requires explicit approval for dependency installation scripts.
+onlyBuiltDependencies:
+  - '@google/genai'
+  - esbuild
+  - protobufjs
+  - workerd
