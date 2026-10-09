@@ -34,7 +34,7 @@ PORT=3000
 
 執行 `npm run dev`，開啟 `http://localhost:3000/admin`，使用設定的 Email 和原密碼登入。本機資料持久化在 `data/lottery.sqlite`，重新啟動保留資料。`npm start` 仍依 `NODE_ENV` 選擇開發／正式模式；Node 正式部署請先 build，再設定 `NODE_ENV=production` 啟動。
 
-`ADMIN_EMAIL`／`ADMIN_PASSWORD_HASH` 只在資料庫完全沒有工作人員帳號時建立第一個管理員；後續修改環境設定不會重設帳號或新增另一個管理員。登入後可從管理後台或帳號選單開啟獨立的「工作人員帳號管理」頁面 `/accounts`，新增、改角色、設定密碼或停用帳號。變更後該帳號的現有 Session 立即失效，最後一個啟用的管理員不能被停用或降權。
+`ADMIN_EMAIL`／`ADMIN_PASSWORD_HASH` 只在資料庫完全沒有工作人員帳號時建立第一個管理員；後續修改環境設定不會重設帳號或新增另一個管理員。登入後可從右上角帳號選單開啟獨立的「工作人員帳號管理」頁面 `/accounts`，新增、改角色、設定密碼或停用帳號。變更後該帳號的現有 Session 立即失效，最後一個啟用的管理員不能被停用或降權。
 
 ## Cloudflare 部署
 

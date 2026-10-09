@@ -669,7 +669,6 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
         </div>
       </div>
 
-      <div className="flex justify-end"><a href="/accounts" className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">工作人員帳號管理</a></div>
 
       {/* Main admin actions */}
       <div className="space-y-4">
