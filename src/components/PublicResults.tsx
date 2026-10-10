@@ -89,7 +89,7 @@ export function PublicResults() {
         <div className="min-w-0">
           <label htmlFor="public-result-field" className="mb-2 block text-sm font-bold text-slate-700">選擇領域</label>
           <select id="public-result-field" disabled={!data.domains.length} aria-busy={loading && !data.domains.length} value={field} onChange={event => selectField(event.target.value)} className="min-h-12 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-3 text-base font-semibold text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60">
-            <option value="">{data.domains.length ? '請選擇領域' : loading ? '領域載入中…' : error ? '領域載入失敗' : '尚無可選領域'}</option>
+            <option value="" disabled>{data.domains.length ? '請選擇領域' : loading ? '領域載入中…' : error ? '領域載入失敗' : '尚無可選領域'}</option>
             {data.domains.map(domain => <option key={domain} value={domain}>{domain}</option>)}
           </select>
         </div>
