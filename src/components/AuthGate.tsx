@@ -79,7 +79,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({
             </h2>
             <p className="text-xs text-slate-500 mt-1">
               {isStage
-                ? '此通道僅供現場主持展演與計分人員操作抽籤'
+                ? '此通道僅供現場主持展演與管理員操作抽籤'
                 : '此通道僅供大會管理員匯入名冊與設定評審'}
             </p>
           </div>
