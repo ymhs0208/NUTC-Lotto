@@ -19,8 +19,8 @@ export function ProjectRosterCard({ project: p, sharedPasswordEnabled, onEdit, o
       <div className="flex-1 space-y-4 p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-xs font-medium text-slate-500">原始編號</p>
-            <p className="mt-0.5 font-mono text-2xl font-black tracking-tight text-slate-900">{p.original_code || '未編號'}</p>
+            <p className="text-xs font-medium text-slate-500">名冊序號</p>
+            <p className="mt-0.5 font-mono text-2xl font-black tracking-tight text-slate-900">{p.seq_no || '—'}</p>
           </div>
           <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${drawn ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
             {drawn ? '已抽籤' : '尚未抽籤'}
@@ -28,7 +28,7 @@ export function ProjectRosterCard({ project: p, sharedPasswordEnabled, onEdit, o
         </div>
 
         <div className="space-y-1.5">
-          <p className="break-words text-xs font-medium text-blue-700">{p.field || '未設定領域'} <span className="text-slate-400">· 名冊序號 {p.seq_no || '—'}</span></p>
+          <p className="break-words text-xs font-medium text-blue-700">{p.field || '未設定領域'} <span className="text-slate-400">· 原始編號 {p.original_code || '未編號'}</span></p>
           <h3 className="break-words text-base font-bold leading-relaxed text-slate-900">{p.project_title}</h3>
         </div>
 
