@@ -147,7 +147,10 @@ export const StudentPortal: React.FC = () => {
         <header className="relative overflow-hidden rounded-[2rem] border border-blue-100 bg-white px-6 py-7 sm:px-9 sm:py-9 shadow-sm">
           <div className="absolute -right-12 -top-20 h-56 w-56 rounded-full bg-blue-100/70 blur-2xl pointer-events-none" />
           <div className="absolute right-36 bottom-0 h-28 w-28 rounded-full bg-amber-100/70 blur-2xl pointer-events-none" />
-          <div className="relative">
+          <div className="relative flex items-start gap-4 sm:gap-6">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-100 bg-white p-1.5 shadow-sm sm:h-16 sm:w-16 sm:rounded-2xl sm:p-2">
+              <img width={64} height={64} src="/college-logo-64.webp" srcSet="/college-logo-64.webp 1x, /college-logo-128.webp 2x" alt="國立臺中科技大學 資訊與流通學院" className="max-h-full max-w-full object-contain" />
+            </div>
             <div className="min-w-0">
               <p className="text-xs sm:text-sm font-semibold text-blue-700">國立臺中科技大學 · 資訊與流通學院</p>
               <h1 className="mt-2 text-2xl sm:text-4xl font-black tracking-tight text-slate-900">專題報告場次查詢</h1>
