@@ -1377,7 +1377,7 @@ export const AdminManagement: React.FC<AdminManagementProps> = ({
                             <span className="font-semibold text-blue-600">{p.leader_id}</span>
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap">
-                            <span className={p.leader_name ? 'font-semibold text-slate-800' : 'text-slate-400'}>{p.leader_name || '尚未提供'}</span>
+                            <span className={p.leader_name ? 'text-slate-700' : 'text-slate-400'}>{p.leader_name || '尚未提供'}</span>
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap">
                             <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-bold ${p.password_set ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
