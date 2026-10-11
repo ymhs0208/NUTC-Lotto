@@ -19,14 +19,14 @@
     <meta name="twitter:image" content="https://nutc.cc.cd/android-chrome-512x512.png" />
   </head>
   <body>
-    <div id="page-boot-fallback" role="status" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-family:system-ui,sans-serif;color:#172b45;padding:20px;box-sizing:border-box">
+    <div id="page-boot-fallback" role="alert" style="min-height:100vh;display:none;align-items:center;justify-content:center;background:#f8fafc;font-family:system-ui,sans-serif;color:#172b45;padding:20px;box-sizing:border-box">
       <div style="max-width:460px;width:100%;text-align:center;border:1px solid #d9e3ed;border-radius:20px;background:white;padding:28px;box-sizing:border-box">
-        <h1 id="page-boot-title" style="font-size:22px;margin:0 0 12px">正在載入網站</h1>
-        <p id="page-boot-message" style="margin:0;font-size:14px;line-height:1.7;color:#52657a">正在準備頁面，請稍候。</p>
+        <h1 id="page-boot-title" style="font-size:22px;margin:0 0 12px">網站載入未完成</h1>
+        <p id="page-boot-message" style="margin:0;font-size:14px;line-height:1.7;color:#52657a">請重新載入取得最新頁面。</p>
         <button id="page-boot-reload" type="button" style="display:none;margin-top:24px;border:0;border-radius:10px;background:#28518a;color:white;padding:12px 20px;font-size:14px;cursor:pointer">重新載入頁面</button>
-        <noscript>請啟用瀏覽器 JavaScript，才能使用本網站。</noscript>
       </div>
     </div>
+    <noscript>請啟用瀏覽器 JavaScript，才能使用本網站。</noscript>
     <script>
       (function () {
         var active = true;
@@ -36,7 +36,7 @@
         function showFailure() {
           if (!active) return;
           var offline = navigator.onLine === false;
-          document.getElementById('page-boot-fallback').setAttribute('role', 'alert');
+          document.getElementById('page-boot-fallback').style.display = 'flex';
           document.getElementById('page-boot-title').textContent = offline ? '目前沒有網路連線' : '網站載入未完成';
           document.getElementById('page-boot-message').textContent = offline ? '請確認 Wi-Fi 或行動網路，恢復連線後再重新載入。' : '可能是網站更新版本、連線中斷或載入較慢。請重新載入取得最新頁面；若問題持續，請聯絡大會工作人員。';
           reload.style.display = 'inline-block';
