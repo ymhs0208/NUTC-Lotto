@@ -92,15 +92,6 @@ function maskStudentLeaderId(value: string): string {
 }
 
 export function studentProjectDto(p: ProjectItem): StudentQueryProject {
-  return {
-    leader_id_masked: maskStudentLeaderId(p.leader_id), project_title: p.project_title, field: p.field,
-    isDrawn: isCompleteDrawResult(p), draw_code: p.draw_code ?? null,
-    assigned_group: isCompleteDrawResult(p) ? p.assigned_group ?? null : null,
-    draw_time: p.draw_time ?? null, evaluators: p.evaluators || [],
-  };
-}
-
-export function publicStudentProjectDto(p: ProjectItem): StudentQueryProject {
   const drawn = isCompleteDrawResult(p);
   return {
     leader_id_masked: maskStudentLeaderId(p.leader_id), project_title: p.project_title,

@@ -4,7 +4,7 @@ import { database } from './database';
 import { verifyPassword } from './credentials';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { createStore, ApiError, validateProjects, validateDomains, type DatabaseState } from './store';
-import { projectDto, stageProjectDto, studentProjectDto, publicStudentProjectDto, prepareProjects, verifyStudentPassword, invalidateSharedPasswordVerification, hashPassword, sharedPasswordHash } from './credentials';
+import { projectDto, stageProjectDto, studentProjectDto, prepareProjects, verifyStudentPassword, invalidateSharedPasswordVerification, hashPassword, sharedPasswordHash } from './credentials';
 import { createStudentSession, getStudentProject, clearStudentSession } from './studentSessions';
 import { createStaffSession, getStaffSession, clearStaffSession } from './staffSessions';
 import { loginLimiter, anonymousLimiter, sessionLimiter } from './rateLimit';
@@ -174,11 +174,11 @@ app.post('/api/student/verify', loginLimiter('student', 10, 1200), loginRoute('s
   if (!valid || !project) throw new ApiError(401, '學號或密碼不正確，若仍無法登入，請洽大會管理員。');
   // The RPC rechecks credentials and replaces the session atomically.
   project = await createStudentSession(req, res, project);
-  res.json({ success: true, sharedPasswordMode: project.shared_password_mode === true, project: project.shared_password_mode ? publicStudentProjectDto(project) : studentProjectDto(project) });
+  res.json({ success: true, sharedPasswordMode: project.shared_password_mode === true, project: studentProjectDto(project) });
 }));
 app.get('/api/student/me', route(async (req, res) => {
   const project = await getStudentProject(req);
-  res.json({ success: true, sharedPasswordMode: project.shared_password_mode === true, project: project.shared_password_mode ? publicStudentProjectDto(project) : studentProjectDto(project) });
+  res.json({ success: true, sharedPasswordMode: project.shared_password_mode === true, project: studentProjectDto(project) });
 }));
 app.post('/api/student/logout', route(async (req, res) => {
   await clearStudentSession(req, res);

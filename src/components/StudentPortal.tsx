@@ -26,7 +26,6 @@ export const StudentPortal: React.FC = () => {
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [myProject, setMyProject] = useState<StudentQueryProject | null>(null);
-  const [sharedPasswordMode, setSharedPasswordMode] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [isCheckingSession, setIsCheckingSession] = useState(hasStudentSessionHint);
@@ -53,17 +52,15 @@ export const StudentPortal: React.FC = () => {
     setIsLoading(true);
     setLoadingAction('refresh');
     try {
-      const data = await request<{ project: StudentQueryProject; sharedPasswordMode: boolean }>('/api/student/me');
+      const data = await request<{ project: StudentQueryProject }>('/api/student/me');
       setMyProject(data.project);
       setLastUpdatedAt(new Date());
-      setSharedPasswordMode(data.sharedPasswordMode);
       setErrorMessage('');
     } catch (error) {
       if (isApiRequestCancelled(error)) return;
       if (error instanceof ApiRequestError && error.status === 401) {
         clearStudentSessionHint();
         setMyProject(null);
-        setSharedPasswordMode(false);
         setLastUpdatedAt(null);
       }
       setErrorMessage(error instanceof Error ? error.message : '查詢失敗');
@@ -74,8 +71,8 @@ export const StudentPortal: React.FC = () => {
     const epoch = requestEpoch.current;
     const controller = new AbortController();
     restoreController.current = controller;
-    request<{ project: StudentQueryProject; sharedPasswordMode: boolean }>('/api/student/me', undefined, { signal: controller.signal, timeoutMs: API_TIMEOUTS.studentRead })
-      .then(data => { if (!cancelled && requestEpoch.current === epoch) { if (!hasStudentSessionHint()) rememberStudentSessionHint(); setMyProject(data.project); setLastUpdatedAt(new Date()); setSharedPasswordMode(data.sharedPasswordMode); } })
+    request<{ project: StudentQueryProject }>('/api/student/me', undefined, { signal: controller.signal, timeoutMs: API_TIMEOUTS.studentRead })
+      .then(data => { if (!cancelled && requestEpoch.current === epoch) { if (!hasStudentSessionHint()) rememberStudentSessionHint(); setMyProject(data.project); setLastUpdatedAt(new Date()); } })
       .catch(error => {
         if (!cancelled && requestEpoch.current === epoch && !isApiRequestCancelled(error)) {
           if (error instanceof ApiRequestError && error.status === 401) clearStudentSessionHint();
@@ -97,7 +94,6 @@ export const StudentPortal: React.FC = () => {
       await request('/api/student/logout', {});
       clearStudentSessionHint();
       setMyProject(null);
-      setSharedPasswordMode(false);
       setStudentIdInput('');
       setPasswordInput('');
       setErrorMessage('');
@@ -127,12 +123,11 @@ export const StudentPortal: React.FC = () => {
     setIsLoading(true);
     setLoadingAction('login');
     try {
-      const data = await request<{ project: StudentQueryProject; sharedPasswordMode: boolean }>('/api/student/verify', { leaderId: query, password: pwd });
+      const data = await request<{ project: StudentQueryProject }>('/api/student/verify', { leaderId: query, password: pwd });
       rememberStudentSessionHint();
       pendingLoginScroll.current = true;
       setMyProject(data.project);
       setLastUpdatedAt(new Date());
-      setSharedPasswordMode(data.sharedPasswordMode);
       setStudentIdInput('');
       setPasswordInput('');
     } catch (error) {
@@ -263,16 +258,6 @@ export const StudentPortal: React.FC = () => {
                     </h2>
                     <p className="flex flex-wrap items-baseline gap-x-1 gap-y-1 text-base leading-relaxed"><span className="text-slate-500">領域：</span><strong className="min-w-0 break-words font-semibold text-slate-700">{myProject.field}</strong></p>
                   </div>
-
-                  {!sharedPasswordMode &&
-                  <div className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 sm:text-right">
-                    <div className="text-xs text-slate-500">現場抽籤時間</div>
-                    <div className="mt-1 text-sm font-medium text-slate-800">
-                      {myProject.draw_time
-                        ? new Date(myProject.draw_time).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                        : '現場即時同步'}
-                    </div>
-                  </div>}
                 </div>
 
                 <dl aria-label="專題抽籤結果" className="space-y-4">
@@ -291,9 +276,6 @@ export const StudentPortal: React.FC = () => {
                     </div>
                   </div>
                 </dl>
-                {!sharedPasswordMode && !!myProject.evaluators?.length && <p className="text-sm text-slate-600 px-1">
-                  評審委員：{myProject.evaluators.join('、')}
-                </p>}
               </div>
             ) : (
               /* Undrawn Waiting State */
@@ -302,7 +284,6 @@ export const StudentPortal: React.FC = () => {
                   <div className="min-w-0 space-y-3">
                     <p className="flex items-center gap-2 text-sm font-bold text-slate-500"><FileText className="h-4 w-4" aria-hidden="true" />專題名稱</p>
                     <h2 className="break-words text-xl font-black leading-snug text-slate-900 sm:text-3xl">{myProject.project_title}</h2>
-                    {!sharedPasswordMode && <p className="flex flex-wrap items-baseline gap-x-1 gap-y-1 text-base leading-relaxed"><span className="text-slate-500">領域：</span><strong className="min-w-0 break-words font-semibold text-slate-700">{myProject.field}</strong></p>}
                   </div>
                 </div>
 

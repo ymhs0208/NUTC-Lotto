@@ -74,7 +74,10 @@ test(`independent SQLite backend works without external services (${workers ? 'W
     assert.deepEqual(Object.keys(stageState.data.projects[0]).sort(), ['assigned_group', 'draw_code', 'field', 'id', 'project_title']);
     const student = await call('/api/student/verify', { leaderId: 'student-0', password });
     assert.equal(student.status, 200, JSON.stringify(student.data)); assert.ok(student.cookie);
-    assert.equal((await call('/api/student/me', undefined, student.cookie)).data.project.project_title, '測試專題 0');
+    const waitingProject = { leader_id_masked: '*****nt-0', project_title: '測試專題 0', field: '', isDrawn: false, draw_code: null, assigned_group: null };
+    assert.equal(student.data.sharedPasswordMode, false);
+    assert.deepEqual(student.data.project, waitingProject);
+    assert.deepEqual((await call('/api/student/me', undefined, student.cookie)).data.project, waitingProject);
     assert.equal((await call('/api/auth/me', undefined, student.cookie)).status, 401);
     const concurrent = await Promise.all([call('/api/projects', { version: 2, projects: saved.data.projects }, admin.cookie), call('/api/projects', { version: 2, projects: saved.data.projects }, admin.cookie)]);
     assert.deepEqual(concurrent.map(r => r.status).sort(), [200, 409]);
@@ -82,6 +85,14 @@ test(`independent SQLite backend works without external services (${workers ? 'W
     assert.equal(draw.status, 200, JSON.stringify(draw.data));
     const publicResult = await call('/api/public/results?field=' + encodeURIComponent('測試'));
     assert.equal(publicResult.data.results.length, 4);
+    const drawnStudent = await call('/api/student/me', undefined, student.cookie);
+    const drawnLogin = await call('/api/student/verify', { leaderId: 'student-0', password });
+    assert.deepEqual(drawnLogin.data.project, drawnStudent.data.project);
+    assert.deepEqual(Object.keys(drawnStudent.data.project).sort(), ['assigned_group', 'draw_code', 'field', 'isDrawn', 'leader_id_masked', 'project_title']);
+    assert.equal(drawnStudent.data.project.isDrawn, true);
+    assert.equal(drawnStudent.data.project.field, '測試');
+    assert.ok(drawnStudent.data.project.draw_code);
+    assert.ok(drawnStudent.data.project.assigned_group > 0);
     assert.deepEqual(Object.keys(publicResult.data.results[0]).sort(), ['assigned_group', 'draw_code', 'leader_name', 'project_title']);
     assert.equal((await call('/api/lottery/draw', { version: 4, field: '測試' }, stage.cookie)).status, 409);
     const audits = await call('/api/staff-audit', undefined, admin.cookie);
