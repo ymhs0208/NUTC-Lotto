@@ -1,0 +1,88 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nutc-lotto",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "keep_vars": true,
+  "triggers": {
+    "crons": [
+      "*/10 * * * *"
+    ]
+  },
+  "routes": [
+    {
+      "pattern": "lottery.nutc.cc.cd",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "LOGIN_LIMITER",
+        "class_name": "LoginLimiter"
+      },
+      {
+        "name": "API_BACKEND",
+        "class_name": "ApiBackend"
+      },
+      {
+        "name": "LOTTERY_DATABASE",
+        "class_name": "LotteryDatabase"
+      },
+      {
+        "name": "PASSWORD_VERIFIER_0",
+        "class_name": "PasswordVerifier",
+        "script_name": "nutc-lotto-password-0"
+      },
+      {
+        "name": "PASSWORD_VERIFIER_1",
+        "class_name": "PasswordVerifier",
+        "script_name": "nutc-lotto-password-1"
+      },
+      {
+        "name": "PASSWORD_VERIFIER_2",
+        "class_name": "PasswordVerifier",
+        "script_name": "nutc-lotto-password-2"
+      },
+      {
+        "name": "PASSWORD_VERIFIER_3",
+        "class_name": "PasswordVerifier",
+        "script_name": "nutc-lotto-password-3"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "LoginLimiter",
+        "ApiBackend"
+      ]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": [
+        "LotteryDatabase"
+      ]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "build": {
+    "command": "npm run build"
+  },
+  "vars": {
+    "PASSWORD_VERIFICATION_MODE": "distributed"
+  }
+}

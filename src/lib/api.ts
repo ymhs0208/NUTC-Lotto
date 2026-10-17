@@ -59,6 +59,8 @@ export async function apiRequest<T = StoreState>(url: string, body?: Record<stri
     const { res, data } = await Promise.race([
       (async () => {
         let requestBody = body;
+        let loginRetries = 0;
+        let challengeSolved = false;
         for (let attempt = 0; ; attempt++) {
           let res: Response;
           try {
@@ -75,7 +77,7 @@ export async function apiRequest<T = StoreState>(url: string, body?: Record<stri
             throw error;
           }
           const data = await res.json().catch(error => { if (controller.signal.aborted) throw error; return null; });
-          if (attempt === 0 && res.status === 429 && data?.loginChallenge && body && ['/api/student/verify', '/api/auth/verify'].includes(url)) {
+          if (!challengeSolved && res.status === 429 && data?.loginChallenge && body && ['/api/student/verify', '/api/auth/verify'].includes(url)) {
             // This response is emitted before credential/session work; only this
             // explicit challenge permits resubmission. Network errors never do.
             const { solveLoginChallenge } = await import('./loginProof');
@@ -84,7 +86,17 @@ export async function apiRequest<T = StoreState>(url: string, body?: Record<stri
               throw new ApiRequestError('登入驗證無法完成，請稍後再試。', 429);
             });
             if (controller.signal.aborted) throw new ApiRequestCancelledError();
+            challengeSolved = true;
             requestBody = { ...body, loginProof }; continue;
+          }
+          if (url === '/api/student/verify' && body && res.status === 503 && data?.loginRetrySafe === true && loginRetries < 2) {
+            const header = res.headers.get('Retry-After');
+            const base = header !== null && /^\d+$/.test(header) ? Number(header) * 1000 : Infinity;
+            const delay = base + 500 + Math.floor(Math.random() * 2500);
+            if (base <= 5000 && !controller.signal.aborted && Date.now() + delay + 1000 < deadline) {
+              loginRetries++;
+              await retryPause(delay, controller.signal); continue;
+            }
           }
           if (attempt === 0 && res.status === 503) {
             const header = res.headers.get('Retry-After');

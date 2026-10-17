@@ -8,10 +8,10 @@ function gate() {
   return { wait: new Promise<void>(resolve => { release = resolve; }), release: () => release() };
 }
 
-test('300 identical shared credentials coalesce once and success expires after the short TTL', async () => {
+test('1,000 identical shared credentials coalesce once and success expires after the short TTL', async () => {
   let calls = 0; let now = 0; const held = gate();
   const verifier = new SharedPasswordVerifier(async () => { calls++; await held.wait; return true; }, 30, 32, () => now);
-  const logins = Array.from({ length: 300 }, () => verifier.verify('common-password', 'hash-v1'));
+  const logins = Array.from({ length: 1000 }, () => verifier.verify('common-password', 'hash-v1'));
   await Promise.resolve(); assert.equal(calls, 1);
   held.release(); assert.ok((await Promise.all(logins)).every(Boolean));
   now = 29; assert.equal(await verifier.verify('common-password', 'hash-v1'), true); assert.equal(calls, 1);

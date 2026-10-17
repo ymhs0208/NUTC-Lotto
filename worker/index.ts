@@ -7,6 +7,7 @@ import { frontendCacheControl } from '../server/frontendAssets';
 import { withRuntime, type RuntimeEnvironment } from '../server/runtime';
 import { runScheduledMaintenance } from '../server/sessionCleanup';
 import { decideLoginBudgets, type LoginBudget, type LoginBucket } from '../server/loginBudgets';
+import { apiBackendName } from '../server/apiRouting';
 
 interface Env extends RuntimeEnvironment { ASSETS: Fetcher; LOGIN_LIMITER: DurableObjectNamespace; API_BACKEND: DurableObjectNamespace; }
 createServer(app).listen(8080);
@@ -31,10 +32,11 @@ export default {
         response = new Response('Page asset not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
       }
     } else {
-      // Keep users behind one campus NAT from queuing on a single API object.
-      // These objects are stateless; the shared login counter lives in LOGIN_LIMITER.
+      // Login admission has one stable object per scope; verification CPU is in
+      // separate Workers. Reads and ordinary APIs retain the random shard pool.
       const shard = crypto.getRandomValues(new Uint8Array(1))[0];
-      response = await env.API_BACKEND.get(env.API_BACKEND.idFromName(`api-${shard}`)).fetch(request.url, { ...forward, body: request.body });
+      const backend = apiBackendName(url.pathname, shard, env.PASSWORD_VERIFICATION_MODE === 'distributed');
+      response = await env.API_BACKEND.get(env.API_BACKEND.idFromName(backend)).fetch(request.url, { ...forward, body: request.body });
     }
     const secureResponse = new Response(response.body as unknown as ReadableStream<Uint8Array> | null, response as unknown as Response);
     if (!isApi && secureResponse.ok) {
@@ -48,12 +50,12 @@ export default {
   },
 };
 
-// Give password hashing the DO CPU budget; business data lives in the dedicated SQLite database object.
+// API orchestration; verification CPU lives in separately deployed password Workers.
 export class ApiBackend {
   constructor(_ctx: DurableObjectState, private env: Env) {}
   async fetch(request: Request) {
-    // Validate/limit in Express before hash admission. The credentials module
-    // bounds scrypt work across all API objects sharing this isolate.
+    // Validate/limit in Express before dispatching password verification.
+    // Database sessions are committed only after verification succeeds.
     return withRuntime(
       { ...this.env, NODE_ENV: 'production' }, () => handleAsNodeRequest(8080, request),
     );

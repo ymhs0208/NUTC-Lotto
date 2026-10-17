@@ -1,14 +1,15 @@
 import { isCompleteDrawResult } from '../src/lib/drawScope';
-import { randomBytes, scrypt, timingSafeEqual, createHash } from 'node:crypto';
+import { randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import type { ProjectItem, StudentQueryProject } from '../src/types';
 import { ApiError } from './errors';
 import { SharedPasswordVerifier } from './sharedPasswordVerifier';
 import { BoundedExecutor } from './resourceLimits';
 import { runtimeEnv, type RuntimeEnvironment } from './runtime';
+import { derivePasswordKey, PASSWORD_HASH_FORMAT } from './passwordHash';
+import { distributedPasswordVerification } from './passwordVerification';
 
 export type StoredProject = ProjectItem & { password_hash?: string; shared_password_mode?: boolean };
-const COST = { N: 32768, r: 8, p: 3, maxmem: 64 * 1024 * 1024 };
-const HASH_FORMAT = /^scrypt-v1\$([a-f0-9]{32})\$([a-f0-9]{64})$/;
+const HASH_FORMAT = PASSWORD_HASH_FORMAT;
 // Shared by every API object in this isolate, including login and admin resets.
 // Node can use its crypto thread pool; Workers retain a conservative memory budget.
 // Initialize after dotenv / withRuntime, and share one pool per platform in the isolate.
@@ -30,9 +31,7 @@ function hashExecutor() {
   }
   return hashExecutors[platform]!;
 }
-const derive = (password: string, salt: string) => hashExecutor().run(() => new Promise<Buffer>((resolve, reject) => {
-  scrypt(password, salt, 32, COST, (error, result) => error ? reject(error) : resolve(result));
-}));
+const derive = (password: string, salt: string) => hashExecutor().run(() => derivePasswordKey(password, salt));
 
 export function validatePassword(password: string, leaderId: string): void {
   if (password.trim().length < 8 || password.length > 128 || password === leaderId || password === leaderId.slice(-4)) {
@@ -44,6 +43,9 @@ export async function hashPassword(password: string): Promise<string> {
   return `scrypt-v1$${salt}$${(await derive(password, salt)).toString('hex')}`;
 }
 export async function verifyPassword(password: string, encoded?: string): Promise<boolean> {
+  const mode = runtimeEnv().PASSWORD_VERIFICATION_MODE;
+  if (mode === 'distributed') return distributedPasswordVerification(password, encoded);
+  if (mode && mode !== 'local') throw new ApiError(503, '密碼驗證服務設定無效。');
   const match = typeof encoded === 'string' ? encoded.match(HASH_FORMAT) : null;
   // Also derive for unknown accounts, avoiding a cheap timing distinction.
   const actual = await derive(password, match?.[1] || '0'.repeat(32));

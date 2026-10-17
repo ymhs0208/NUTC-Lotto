@@ -158,9 +158,9 @@ export default function App() {
     }
   };
 
-  const handleSharedPassword = async (action: 'generate' | 'clear') => {
+  const handleSharedPassword = async (action: 'generate' | 'set' | 'clear', password?: string) => {
     if (dataVersion === null) throw new Error('資料尚未載入，請重新整理。');
-    const state = await request<StoreState & { password?: string }>('/api/student/shared-password', { action, version: dataVersion });
+    const state = await request<StoreState & { password?: string }>('/api/student/shared-password', { action, version: dataVersion, ...(action === 'set' ? { password } : {}) });
     applyState(state);
     return state.password;
   };

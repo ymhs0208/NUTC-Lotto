@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { studentLoginWork } from '../server/loginAdmission';
+import { sessionWork } from '../server/sessionSecurity';
 import { BoundedExecutor, ResourceBusyError, ShortCache } from '../server/resourceLimits';
 
 function gate() {
@@ -53,9 +54,9 @@ test('public cache coalesces misses, expires and does not retain failures or inv
 });
 
 
-test('student admission holds 16 active and 768 waiting requests, rejects overflow, and recovers', async () => {
+test('student admission accepts a 1,000-request burst, bounds overflow, and recovers', async () => {
   const held = gate(); let active = 0; let maximum = 0;
-  const work = Array.from({ length: 786 }, () => studentLoginWork.run(async () => {
+  const work = Array.from({ length: 1042 }, () => studentLoginWork.run(async () => {
     active++; maximum = Math.max(maximum, active);
     try { await held.wait; } finally { active--; }
   }));
@@ -64,8 +65,21 @@ test('student admission holds 16 active and 768 waiting requests, rejects overfl
   assert.equal(maximum, 16);
   held.release();
   const results = await all;
-  assert.equal(results.filter(r => r.status === 'fulfilled').length, 784);
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1040);
   assert.equal(results.filter(r => r.status === 'rejected' && r.reason instanceof ResourceBusyError).length, 2);
   assert.equal(maximum, 16); assert.equal(active, 0);
   assert.equal(await studentLoginWork.run(async () => 'ready'), 'ready');
+});
+
+test('session admission buffers 1,000 simultaneous queries with only 16 active', async () => {
+  const held = gate(); let active = 0; let maximum = 0;
+  const work = Array.from({ length: 1000 }, () => sessionWork.run(async () => {
+    active++; maximum = Math.max(maximum, active);
+    try { await held.wait; } finally { active--; }
+  }));
+  const all = Promise.all(work);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(maximum, 16);
+  held.release(); await all;
+  assert.equal(active, 0); assert.equal(maximum, 16);
 });

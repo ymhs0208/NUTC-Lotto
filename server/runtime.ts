@@ -9,8 +9,13 @@ export interface RuntimeEnvironment {
   DATABASE?: import('./databaseTypes').DatabaseGateway;
   NODE_ENV?: string;
   PASSWORD_HASH_CONCURRENCY?: string;
+  PASSWORD_VERIFICATION_MODE?: string;
   CAMPUS_NETWORK_ONLY?: string;
   LOGIN_LIMITER?: DurableObjectNamespace;
+  PASSWORD_VERIFIER_0?: DurableObjectNamespace;
+  PASSWORD_VERIFIER_1?: DurableObjectNamespace;
+  PASSWORD_VERIFIER_2?: DurableObjectNamespace;
+  PASSWORD_VERIFIER_3?: DurableObjectNamespace;
 }
 const context = new AsyncLocalStorage<RuntimeEnvironment>();
 export function runtimeEnv(): RuntimeEnvironment { return context.getStore() || process.env; }

@@ -69,7 +69,7 @@ test('session database work rejects overflow and never exceeds 16 concurrent ope
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
   let active = 0; let maximum = 0;
-  const requests = Array.from({ length: 530 }, () => sessionWork.run(async () => {
+  const requests = Array.from({ length: 1042 }, () => sessionWork.run(async () => {
     active++; maximum = Math.max(maximum, active);
     try { await gate; } finally { active--; }
   }));

@@ -61,5 +61,8 @@
   },
   "build": {
     "command": "npm run build"
+  },
+  "vars": {
+    "PASSWORD_VERIFICATION_MODE": "local"
   }
 }

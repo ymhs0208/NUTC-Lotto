@@ -5,6 +5,39 @@ import { getAuthSession, saveAuthSession, clearAuthSession } from '../src/lib/au
 import { issueLoginChallenge, verifyLoginProof } from '../server/loginChallenge';
 import { withRuntime } from '../server/runtime';
 
+test('student login retries only explicit pre-admission rejections, at most twice', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalRandom = Math.random;
+  let calls = 0;
+  Math.random = () => 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return Response.json({ success: false, loginRetrySafe: true, error: '服務忙碌' }, {
+      status: 503, headers: { 'Retry-After': '0' },
+    });
+  };
+  try {
+    await assert.rejects(apiRequest('/api/student/verify', { leaderId: 'student', password: 'password' }), /服務忙碌/);
+    assert.equal(calls, 3);
+    calls = 0;
+    await assert.rejects(apiRequest('/api/lottery/draw', { version: 1 }), /服務忙碌/);
+    assert.equal(calls, 1);
+    calls = 0;
+    globalThis.fetch = async () => { calls++; return Response.json({ success: false }, { status: 503 }); };
+    await assert.rejects(apiRequest('/api/student/verify', { leaderId: 'student', password: 'password' }), /503/);
+    assert.equal(calls, 1);
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return calls === 1
+        ? Response.json({ success: false, loginRetrySafe: true }, { status: 503, headers: { 'Retry-After': '0' } })
+        : Response.json({ success: true });
+    };
+    assert.deepEqual(await apiRequest('/api/student/verify', { leaderId: 'student', password: 'password' }), { success: true });
+    assert.equal(calls, 2);
+  } finally { globalThis.fetch = originalFetch; Math.random = originalRandom; }
+});
+
 test('explicit pre-auth challenge is solved once without replaying network failures or arbitrary writes', async () => {
   const originalFetch = globalThis.fetch;
   const context = { scope: 'student', account: 'victim', ip: '127.0.0.1', password: 'correct-password' };

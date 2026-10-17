@@ -6,7 +6,7 @@ import { BoundedExecutor } from './resourceLimits';
 
 export type SessionScope = 'student' | 'staff';
 // Shared by reads, inserts and deletes across API objects in this isolate.
-export const SESSION_WORK_LIMITS = { concurrency: 16, maxWaiting: 512, waitMs: 10000 } as const;
+export const SESSION_WORK_LIMITS = { concurrency: 16, maxWaiting: 1024, waitMs: 10000 } as const;
 export const sessionWork = new BoundedExecutor(SESSION_WORK_LIMITS.concurrency, SESSION_WORK_LIMITS.maxWaiting, SESSION_WORK_LIMITS.waitMs);
 
 function signature(token: string, scope: SessionScope): Buffer {

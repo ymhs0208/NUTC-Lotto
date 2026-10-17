@@ -4,7 +4,7 @@ import { database } from './database';
 import { verifyPassword } from './credentials';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { createStore, ApiError, validateProjects, validateDomains, type DatabaseState } from './store';
-import { projectDto, stageProjectDto, studentProjectDto, prepareProjects, verifyStudentPassword, invalidateSharedPasswordVerification, hashPassword, sharedPasswordHash } from './credentials';
+import { projectDto, stageProjectDto, studentProjectDto, prepareProjects, verifyStudentPassword, invalidateSharedPasswordVerification, hashPassword, sharedPasswordHash, validatePassword } from './credentials';
 import { createStudentSession, getStudentProject, clearStudentSession } from './studentSessions';
 import { createStaffSession, getStaffSession, clearStaffSession } from './staffSessions';
 import { loginLimiter, anonymousLimiter, sessionLimiter } from './rateLimit';
@@ -92,7 +92,24 @@ const route = (handler: (req: Request, res: Response) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => { Promise.resolve(handler(req, res)).catch(next); };
 
 const loginRoute = (scope: 'staff' | 'student', handler: (req: Request, res: Response) => Promise<unknown>) =>
-  route((req, res) => (scope === 'student' ? studentLoginWork : staffLoginWork).run(() => handler(req, res)));
+  route(async (req, res) => {
+    let started = false;
+    try {
+      await (scope === 'student' ? studentLoginWork : staffLoginWork).run(() => {
+        started = true;
+        return handler(req, res);
+      });
+    } catch (error) {
+      if (scope === 'student' && !started && error instanceof ResourceBusyError) {
+        // Only admission failures are safe to resubmit. Once the handler starts,
+        // a failure may follow a committed session and must never carry this flag.
+        res.setHeader('Retry-After', error.retryAfter);
+        res.status(503).json({ success: false, error: error.message, loginRetrySafe: true });
+        return;
+      }
+      throw error;
+    }
+  });
 
 const staffIdentities = new WeakMap<Request, NonNullable<Awaited<ReturnType<typeof getStaffSession>>>>();
 async function staffIdentity(req: Request) {
@@ -242,7 +259,7 @@ app.post('/api/projects', route(async (req, res) => {
 }));
 app.post('/api/student/shared-password', route(async (req, res) => {
   await authorize(req, true);
-  if (req.body.action !== 'generate' && req.body.action !== 'clear') throw new ApiError(400, '共用密碼操作無效。');
+  if (!['generate', 'set', 'clear'].includes(req.body.action)) throw new ApiError(400, '共用密碼操作無效。');
   const store = createStore();
   const state = await store.load();
   checkVersion(req, state);
@@ -255,10 +272,15 @@ app.post('/api/student/shared-password', route(async (req, res) => {
     res.json(staffState(saved, 'admin'));
     return;
   }
-  const password = Array.from(randomBytes(8), byte => SHARED_PASSWORD_ALPHABET[byte & 31]).join('');
+  const custom = req.body.action === 'set';
+  if (custom) {
+    if (typeof req.body.password !== 'string') throw new ApiError(400, '請輸入共用密碼。');
+    for (const project of state.projects) validatePassword(req.body.password, project.leader_id.trim());
+  }
+  const password: string = custom ? req.body.password : Array.from(randomBytes(8), byte => SHARED_PASSWORD_ALPHABET[byte & 31]).join('');
   const password_hash = await hashPassword(password);
   state.projects = state.projects.map(p => ({ ...projectDto(p), password_hash, shared_password_mode: true }));
-  const saved = await store.save(state, state.version, await stateAudit(req, 'shared_password_generate', [], state.projects.length, state.version));
+  const saved = await store.save(state, state.version, await stateAudit(req, custom ? 'shared_password_set' : 'shared_password_generate', [], state.projects.length, state.version));
   invalidateSharedPasswordVerification();
   res.json({ ...staffState(saved, 'admin'), password });
 }));

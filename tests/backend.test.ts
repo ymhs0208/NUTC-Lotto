@@ -24,7 +24,8 @@ test(`independent SQLite backend works without external services (${workers ? 'W
   const local = workers ? undefined : openLocalDatabase(join(dir, 'database.sqlite'), { email: env.ADMIN_EMAIL, passwordHash: hash });
   const nodeServer = createServer((req, res) => withRuntime({ ...env, DATABASE: local?.database }, () => app(req, res)));
   async function startWorker() {
-    child = spawn(process.execPath, [resolve('node_modules/wrangler/bin/wrangler.js'), 'dev', '--config', join(dir, 'wrangler.json'), '--port', String(port), '--local-protocol', 'https', '--persist-to', join(dir, 'state'),
+    const poolConfigs = Array.from({ length: 4 }, (_, i) => ['--config', join(dir, `password-${i}.json`)]).flat();
+    child = spawn(process.execPath, [resolve('node_modules/wrangler/bin/wrangler.js'), 'dev', '--config', join(dir, 'wrangler.json'), ...poolConfigs, '--port', String(port), '--local-protocol', 'https', '--persist-to', join(dir, 'state'),
       '--var', `SESSION_SECRET:${env.SESSION_SECRET}`, '--var', `ADMIN_EMAIL:${env.ADMIN_EMAIL}`, '--var', `ADMIN_PASSWORD_HASH:${hash}`], { cwd: process.cwd(), env: { ...process.env, WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'] });
     child.stdout?.on('data', chunk => { logs += String(chunk); }); child.stderr?.on('data', chunk => { logs += String(chunk); });
     for (let i = 0; i < 100; i++) {
@@ -43,8 +44,14 @@ test(`independent SQLite backend works without external services (${workers ? 'W
     base = `${workers ? 'https' : 'http'}://127.0.0.1:${port}`;
     if (workers) {
       await new Promise<void>(r => nodeServer.close(() => r()));
-      const config = JSON.parse(await readFile('wrangler.jsonc', 'utf8'));
+      const config = JSON.parse(await readFile('wrangler.distributed.jsonc', 'utf8'));
       delete config.routes; config.main = resolve('worker/index.ts'); config.assets.directory = resolve('dist'); config.name = 'lottery-test';
+      for (let i = 0; i < 4; i++) {
+        const pool = JSON.parse(await readFile(`wrangler.password-${i}.jsonc`, 'utf8'));
+        pool.name = `lottery-password-test-${i}`; pool.main = resolve('worker/passwordVerifier.ts');
+        config.durable_objects.bindings.find((b: { name: string }) => b.name === `PASSWORD_VERIFIER_${i}`).script_name = pool.name;
+        await writeFile(join(dir, `password-${i}.json`), JSON.stringify(pool));
+      }
       await writeFile(join(dir, 'wrangler.json'), JSON.stringify(config));
       await startWorker();
     }
@@ -104,18 +111,46 @@ test(`independent SQLite backend works without external services (${workers ? 'W
     const newStudent = await call('/api/student/verify', { leaderId: 'student-1', password: shared.data.password });
     assert.equal(newStudent.status, 200);
     assert.deepEqual(Object.keys(newStudent.data.project).sort(), ['assigned_group', 'draw_code', 'field', 'isDrawn', 'leader_id_masked', 'project_title']);
-    assert.equal((await call('/api/student/logout', {}, newStudent.cookie)).status, 200);
+    assert.equal((await call('/api/student/shared-password', { version: 5, action: 'set', password: 'Custom-shared-123!' }, stage.cookie)).status, 403);
+    for (const invalid of [undefined, null, 12345678, [], 'short12', ' '.repeat(8), 'x'.repeat(129), 'student-1']) {
+      const rejected = await call('/api/student/shared-password', { version: 5, action: 'set', password: invalid }, admin.cookie);
+      assert.equal(rejected.status, 400, JSON.stringify(rejected.data));
+    }
+    assert.equal((await call('/api/state', undefined, admin.cookie)).data.version, 5);
+    assert.equal((await call('/api/student/shared-password', { version: 4, action: 'set', password: 'Custom-shared-123!' }, admin.cookie)).status, 409);
+    const customPassword = 'Custom-shared-123!';
+    const custom = await call('/api/student/shared-password', { version: 5, action: 'set', password: customPassword }, admin.cookie);
+    assert.equal(custom.status, 200, JSON.stringify(custom.data));
+    assert.equal(custom.data.password, customPassword);
+    assert.equal(custom.data.sharedPasswordEnabled, true);
+    assert.equal(custom.data.version, 6);
+    assert.equal((await call('/api/student/me', undefined, newStudent.cookie)).status, 401);
+    assert.equal((await call('/api/student/verify', { leaderId: 'student-1', password: shared.data.password })).status, 401);
+    for (let i = 0; i < roster.length; i++) {
+      const login = await call('/api/student/verify', { leaderId: `student-${i}`, password: customPassword });
+      assert.equal(login.status, 200, JSON.stringify(login.data));
+      assert.equal(login.data.sharedPasswordMode, true);
+      assert.equal(login.data.project.project_title, roster[i].project_title);
+      assert.equal((await call('/api/student/me', undefined, login.cookie)).status, 200);
+      assert.equal((await call('/api/student/logout', {}, login.cookie)).status, 200);
+    }
+    const customAudit = await call('/api/staff-audit?action=shared_password_set', undefined, admin.cookie);
+    assert.ok(customAudit.data.records.some((record: any) => record.action === 'shared_password_set'));
+    assert.equal(JSON.stringify(customAudit.data).includes(customPassword), false);
     assert.equal((await call('/api/student/me', undefined, newStudent.cookie)).status, 401);
     const backup = await call('/api/data/export', undefined, admin.cookie);
     assert.equal(backup.status, 200); assert.equal(backup.data.format, 'lottery-sqlite-v1'); assert.equal(backup.data.projects.length, 4);
+    assert.equal(JSON.stringify(backup.data).includes(customPassword), false);
+    assert.ok(backup.data.projects.every((project: any) => project.shared_password_mode === true && project.password_hash?.startsWith('scrypt-v1$')));
+    assert.equal(new Set(backup.data.projects.map((project: any) => project.password_hash)).size, 1);
     assert.equal((await call('/api/data/export', undefined, stage.cookie)).status, 403);
     assert.equal((await call('/api/data/import', { projects: roster, domainConfigs: domains }, admin.cookie)).status, 409);
-    const reset = await call('/api/lottery/reset', { version: 5, field: '測試' }, stage.cookie);
+    const reset = await call('/api/lottery/reset', { version: 6, field: '測試' }, stage.cookie);
     assert.equal(reset.status, 200, JSON.stringify(reset.data));
     assert.equal((await call('/api/public/results?field=' + encodeURIComponent('測試'))).data.results.length, 0);
     if (workers) {
       await stopWorker(); await startWorker();
-      assert.equal((await call('/api/state', undefined, admin.cookie)).data.version, 6);
+      assert.equal((await call('/api/state', undefined, admin.cookie)).data.version, 7);
       assert.equal((await call('/api/state', undefined, admin.cookie)).data.projects.length, 4);
       assert.equal((await fetch(base + '/admin')).status, 200);
       assert.equal((await fetch(base + '/command', { method: 'POST', body: JSON.stringify({ command: 'load', args: {} }) })).status, 405);
