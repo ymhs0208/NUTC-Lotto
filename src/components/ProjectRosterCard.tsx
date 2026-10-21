@@ -56,7 +56,7 @@ export function ProjectRosterCard({ project: p, sharedPasswordEnabled, onEdit, o
           </div>
         </dl>
 
-        {conflict && <p className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold leading-relaxed text-rose-800"><AlertTriangle className="h-4 w-4 shrink-0" />指導老師與評審名單有利益衝突，請檢查分組設定。</p>}
+        {conflict && <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-900"><AlertTriangle className="h-4 w-4 shrink-0" />未能迴避指導老師，抽籤已完成，供管理員知悉。</p>}
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
           <span className="text-xs text-slate-500">學生登入密碼</span>

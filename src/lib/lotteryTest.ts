@@ -54,7 +54,7 @@ export function testLottery(projects: ProjectItem[], configs: DomainConfig[], fi
       const drawn = allocateDomainSubgroups(items, groupCount, name, cfg?.evaluatorsPerGroup || {}, cfg?.groupCapacities, cfg?.code);
       for (const p of drawn) {
         result.groups[p.assigned_group! - 1].count++;
-        if (isAdvisorConflict(p.advisor, p.evaluators)) result.issues.push({ level: 'error', message: `${p.original_code}「${p.project_title}」在第 ${p.assigned_group} 組與指導老師有利益衝突。` });
+        if (isAdvisorConflict(p.advisor, p.evaluators)) result.issues.push({ level: 'warning', message: `${p.original_code}「${p.project_title}」在第 ${p.assigned_group} 組無法迴避指導老師，仍可完成抽籤。` });
         const previous = seenCodes.get(p.draw_code!);
         if (previous) {
           const message = `抽籤後編號 ${p.draw_code} 重複，涉及「${previous.field}」與「${name}」，請檢查領域名稱與代碼。`;

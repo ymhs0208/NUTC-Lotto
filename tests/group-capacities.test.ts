@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { allocateDomainSubgroups, isAdvisorConflict, executeAllDomainsIndependentLottery } from '../src/lib/lottery';
-import { LotteryAllocationError } from '../src/lib/groupCapacities';
 import { validateDomains } from '../server/store';
 import type { ProjectItem } from '../src/types';
 
@@ -29,29 +28,26 @@ test('explicit allocation satisfies feasible balanced constraints across randomi
   }
 });
 
-test('capacity matching agrees with exhaustive feasibility for all four-project three-group constraint graphs', () => {
+test('capacity matching minimizes conflicts for all four-project three-group constraint graphs', () => {
   const capacities = { 1: 1, 2: 1, 3: 2 };
-  for (let graph = 0; graph < 7 ** 4; graph++) {
+  for (let graph = 0; graph < 8 ** 4; graph++) {
     let rest = graph;
-    const masks = Array.from({ length: 4 }, () => { const mask = rest % 7 + 1; rest = Math.floor(rest / 7); return mask; });
+    const masks = Array.from({ length: 4 }, () => { const mask = rest % 8; rest = Math.floor(rest / 8); return mask; });
     const projects = masks.map((_, i) => make(i, `指導${i}`));
     const evaluators = Object.fromEntries([1, 2, 3].map(g => [g, projects.filter((_, i) => !(masks[i] & (1 << (g - 1)))).map(p => p.advisor)]));
-    const feasible = (index: number, counts: number[]): boolean => index === 4 || [0, 1, 2].some(g => {
-      if (!(masks[index] & (1 << g)) || counts[g] >= capacities[(g + 1) as 1 | 2 | 3]) return false;
+    const minimumConflicts = (index: number, counts: number[]): number => index === 4 ? 0 : Math.min(...[0, 1, 2].map(g => {
+      if (counts[g] >= capacities[(g + 1) as 1 | 2 | 3]) return Infinity;
       const next = [...counts]; next[g]++;
-      return feasible(index + 1, next);
-    });
-    if (feasible(0, [0, 0, 0])) {
-      const drawn = allocateDomainSubgroups(projects, 3, '企業智慧化', evaluators, capacities);
-      assert.deepEqual([1, 2, 3].map(g => drawn.filter(p => p.assigned_group === g).length), [1, 1, 2]);
-      assert.ok(drawn.every(p => !isAdvisorConflict(p.advisor, p.evaluators)));
-    } else {
-      assert.throws(() => allocateDomainSubgroups(projects, 3, '企業智慧化', evaluators, capacities), LotteryAllocationError);
-    }
+      return Number(!(masks[index] & (1 << g))) + minimumConflicts(index + 1, next);
+    }));
+    const drawn = allocateDomainSubgroups(projects, 3, '企業智慧化', evaluators, capacities);
+    assert.deepEqual([1, 2, 3].map(g => drawn.filter(p => p.assigned_group === g).length), [1, 1, 2]);
+    assert.equal(new Set(drawn.map(p => p.id)).size, projects.length);
+    assert.equal(drawn.filter(p => isAdvisorConflict(p.advisor, p.evaluators)).length, minimumConflicts(0, [0, 0, 0]));
   }
 });
 
-test('invalid capacities, wrong totals, and impossible reviewer constraints fail before results are returned', () => {
+test('invalid capacities and wrong totals still fail before results are returned', () => {
   const domain = { id: 'd', field: '企業智慧化', groupCount: 2 };
   for (const value of [null, [], {}, { 1: 1 }, { 1: -1, 2: 2 }, { 1: 0.5, 2: 2 }, { 1: '1', 2: 2 }, { 1: 1, 3: 2 }, { '01': 1, 2: 2 }, { 1: 2001, 2: 0 }]) {
     assert.throws(() => validateDomains([{ ...domain, groupCapacities: value }]));
@@ -59,8 +55,20 @@ test('invalid capacities, wrong totals, and impossible reviewer constraints fail
   validateDomains([{ ...domain, groupCapacities: { 1: 0, 2: 2 } }]);
   const projects = [make(0, '王'), make(1, '王')];
   assert.throws(() => allocateDomainSubgroups(projects, 2, domain.field, {}, { 1: 1, 2: 2 }), /共 3 件.*名冊有 2 件/);
-  assert.throws(() => allocateDomainSubgroups(projects, 2, domain.field, { 1: ['王'], 2: [] }, { 1: 1, 2: 1 }), /迴避/);
-  assert.throws(() => allocateDomainSubgroups(projects, 2, domain.field, { 1: ['王'], 2: ['王'] }, { 1: 1, 2: 1 }), /迴避/);
+});
+
+test('unavoidable reviewer conflicts preserve exact counts, zero capacities, and conflict reporting', () => {
+  const projects = [make(0, '王'), make(1, '王')];
+  for (const [evaluators, expected] of [[{ 1: ['王'], 2: [] }, 1], [{ 1: ['王'], 2: ['王'] }, 2]] as const) {
+    const result = executeAllDomainsIndependentLottery(projects, [{
+      id: 'a', field: '企業智慧化', groupCount: 3,
+      groupCapacities: { 1: 1, 2: 1, 3: 0 },
+      evaluatorsPerGroup: { 1: [...evaluators[1]], 2: [...evaluators[2]], 3: [] },
+    }]);
+    assert.equal(result.conflictCount, expected);
+    assert.deepEqual([1, 2, 3].map(group => result.updatedProjects.filter(p => p.assigned_group === group).length), [1, 1, 0]);
+    assert.equal(new Set(result.updatedProjects.map(p => p.id)).size, 2);
+  }
 });
 
 test('whole-school lottery uses each domain capacity configuration independently', () => {

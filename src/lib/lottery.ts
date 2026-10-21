@@ -103,10 +103,16 @@ export function allocateDomainSubgroups(
       }
       return false;
     };
+    const unmatched: number[] = [];
     for (let index = 0; index < analyzedProjects.length; index++) {
-      if (!assign(index, new Set())) {
-        throw new LotteryAllocationError(`「${domainField}」無法同時滿足各組件數與指導老師迴避，請調整各組件數或評審名單後再抽籤。`);
-      }
+      if (!assign(index, new Set())) unmatched.push(index);
+    }
+    const remainingSlots = secureFisherYatesShuffle(
+      Array.from({ length: k }, (_, index) => index + 1)
+        .flatMap(group => Array<number>(groupCapacities[group] - members[group].length).fill(group))
+    );
+    for (const [position, index] of unmatched.entries()) {
+      members[remainingSlots[position]].push(index);
     }
     for (let g = 1; g <= k; g++) buckets[g] = members[g].map(index => analyzedProjects[index].project);
   } else {
@@ -152,7 +158,7 @@ export function allocateDomainSubgroups(
 /**
  * Execute whole-school lottery:
  * Loops through EACH domain independently, respects each domain's groupCount,
- * and enforces advisor conflict of interest.
+ * and prioritizes advisor conflict avoidance.
  */
 export function executeAllDomainsIndependentLottery(
   allProjects: ProjectItem[],

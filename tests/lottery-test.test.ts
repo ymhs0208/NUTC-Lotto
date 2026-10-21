@@ -20,7 +20,7 @@ test('test draw runs the current allocator on already-drawn projects without cha
   assert.deepEqual(Object.keys(result.domains[0].preview[0]).sort(), ['drawCode', 'group', 'originalCode', 'title']);
 });
 
-test('test draw reports wrong totals and infeasible capacity constraints, and still tests other domains', () => {
+test('test draw rejects wrong totals and warns about unavoidable conflicts while still producing results', () => {
   const other = { ...projects[0], id: 'g', field: '進修部', original_code: 'G01' };
   const result = testLottery([...projects, other], [{ ...config, groupCapacities: { 1: 2, 2: 2 } }, { id: 'g', field: '進修部', groupCount: 1, evaluatorsPerGroup: { 1: ['李教授'] } }], 'ALL', 1);
   assert.equal(result.errorCount, 1);
@@ -28,13 +28,18 @@ test('test draw reports wrong totals and infeasible capacity constraints, and st
   assert.equal(result.domains[0].preview.length, 0);
   assert.equal(result.domains[1].preview.length, 1);
   const impossible = testLottery(projects, [{ ...config, evaluatorsPerGroup: { 1: ['王教授'], 2: ['陳教授'] } }], config.field, 1);
-  assert.equal(impossible.errorCount, 1); assert.match(impossible.domains[0].issues[0].message, /迴避/);
+  assert.equal(impossible.errorCount, 0);
+  assert.equal(impossible.warningCount, 1);
+  assert.match(impossible.domains[0].issues[0].message, /無法迴避.*仍可完成抽籤/);
+  assert.equal(impossible.domains[0].preview.length, 3);
+  assert.deepEqual(impossible.domains[0].groups.map(g => g.count), [1, 2]);
 });
 
 test('test draw detects legacy advisor conflicts, duplicate codes, and missing reviewers', () => {
   const conflicts = testLottery(projects, [{ ...config, groupCapacities: undefined, evaluatorsPerGroup: { 1: ['王教授'], 2: ['王教授'] } }], 'ALL', 1);
-  assert.equal(conflicts.errorCount, 3);
-  assert.ok(conflicts.domains[0].issues.every(i => /利益衝突/.test(i.message)));
+  assert.equal(conflicts.errorCount, 0);
+  assert.equal(conflicts.warningCount, 3);
+  assert.ok(conflicts.domains[0].issues.every(i => i.level === 'warning' && /無法迴避/.test(i.message)));
   const aliases = testLottery([projects[0], { ...projects[1], field: 'A.企業智慧化' }], [{ ...config, groupCapacities: undefined }, { id: 'alias', field: 'A.企業智慧化', groupCount: 1 }], 'ALL', 1);
   assert.ok(aliases.errorCount >= 1);
   assert.ok(aliases.domains.every(d => d.issues.some(i => /相同抽籤編號前綴/.test(i.message))));
